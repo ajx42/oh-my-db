@@ -66,6 +66,5 @@ add_executable(server server.cpp)
 target_link_libraries(server leveldb)
 target_link_libraries(server db_grpc_proto)
 
-#add_executable(client client.cpp)
-#target_link_libraries(client db_grpc_proto)
-#target_link_libraries(client leveldb)
+add_executable(client client.cpp)
+target_link_libraries(client db_grpc_proto)

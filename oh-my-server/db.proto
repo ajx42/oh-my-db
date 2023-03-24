@@ -3,7 +3,7 @@ syntax = "proto3";
 package ohmydb;
 
 service OhMyDB {
-    //#rpc TestCall(Cmd) returns(Ack) {}
+    rpc TestCall(Cmd) returns(Ack) {}
     //#rpc DownloadFile(DownloadRequest) returns (stream DownloadResponse){}
     //#rpc DownloadStat(DownloadRequest) returns (stream DownloadResponse){}
     //#rpc GetXAttr(GetXAttrRequest) returns (stream DownloadResponse){}
@@ -22,14 +22,14 @@ service OhMyDB {
     //#rpc SpeedTest(SpeedTestRequest) returns (Ack) {}
 }
 
-//#message Ack {
-//#    int32 ok = 1;
-//#}
-//#
-//#message Cmd {
-//#    int32 sup = 1;
-//#}
-//#
+message Ack {
+    int32 ok = 1;
+}
+
+message Cmd {
+    int32 sup = 1;
+}
+
 //#message DownloadRequest{
 //#    string file_name = 1;
 //#}
