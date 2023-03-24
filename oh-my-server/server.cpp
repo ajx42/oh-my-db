@@ -16,14 +16,26 @@
 
 class OhMyDBService final : public ohmydb::OhMyDB::Service
 {
-    private:
+private:
+public:
+    explicit OhMyDBService()
+    {
+    }
 
-    public:
-
+    grpc::Status TestCall(grpc::ServerContext *, const ohmydb::Cmd *, ohmydb::Ack *);
 };
+
+grpc::Status OhMyDBService::TestCall(
+    grpc::ServerContext *, const ohmydb::Cmd *cmd, ohmydb::Ack *ack)
+{
+    std::cout << "Client has made contact... " << std::endl;
+    ack->set_ok(cmd->sup());
+    return grpc::Status::OK;
+}
 
 int main()
 {
+    // leveldb setup
     leveldb::DB *db;
     leveldb::Options options;
     options.create_if_missing = true;
@@ -34,6 +46,25 @@ int main()
         return 1;
     }
 
+    // TODO: lets setup leveldb inside the service
+    std::string server_addr("0.0.0.0:50051");
+    OhMyDBService service;
+
+    grpc::EnableDefaultHealthCheckService(true);
+    grpc::reflection::InitProtoReflectionServerBuilderPlugin();
+    grpc::ServerBuilder builder;
+
+    builder.AddListeningPort(server_addr, grpc::InsecureServerCredentials());
+    builder.RegisterService(&service);
+
+    std::unique_ptr<grpc::Server> server(builder.BuildAndStart());
+    std::cout << "Server listening on " << server_addr << std::endl;
+
+    server->Wait();
+
+    return 0;
+
+#if 0
     int server_fd, new_socket;
     struct sockaddr_in address;
     int opt = 1;
@@ -150,4 +181,5 @@ int main()
     }
 
     return 0;
+#endif
 }
