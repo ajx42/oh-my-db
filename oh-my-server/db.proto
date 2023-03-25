@@ -4,22 +4,8 @@ package ohmydb;
 
 service OhMyDB {
     rpc TestCall(Cmd) returns(Ack) {}
-    //#rpc DownloadFile(DownloadRequest) returns (stream DownloadResponse){}
-    //#rpc DownloadStat(DownloadRequest) returns (stream DownloadResponse){}
-    //#rpc GetXAttr(GetXAttrRequest) returns (stream DownloadResponse){}
-    //#rpc Access(AccessRequest) returns (AccessResponse){}
-    //#rpc Mkdir(MkdirRequest) returns (MkdirResponse){}
-    //#rpc Rmdir(RmdirRequest) returns (RmdirResponse){}
-    //#rpc Open(OpenRequest) returns (OpenResponse){}
-    //#rpc Create(CreateRequest) returns (CreateResponse){}
-    //#rpc Writeback(stream StreamWriteRequest) returns (StreamWriteResponse){}
-    //#rpc ReadFile(StreamReadRequest) returns (stream StreamReadResponse){}
-    //#rpc ReadDir(StreamReadRequest) returns (stream StreamReadResponse){}
-    //#rpc Unlink(UnlinkRequest) returns (UnlinkResponse){}
-    //#rpc Rename(RenameRequest) returns (RenameResponse){}
-    //#rpc Link(LinkRequest) returns (LinkResponse){}
-    //#rpc Symlink(SymlinkRequest) returns (SymlinkResponse){}
-    //#rpc SpeedTest(SpeedTestRequest) returns (Ack) {}
+    rpc Put(PutRequest) returns(Ack) {}
+    rpc Get(GetRequest) returns(GetResponse) {}
 }
 
 message Ack {
@@ -30,137 +16,16 @@ message Cmd {
     int32 sup = 1;
 }
 
-//#message DownloadRequest{
-//#    string file_name = 1;
-//#}
-//#
-//#message DownloadResponse{
-//#    bytes data = 1;
-//#    int32 ret = 2;
-//#    int32 server_errno = 3;
-//#}
-//#
-//#message GetXAttrRequest{
-//#    string file_path = 1; 
-//#    string name = 2; 
-//#    int32 size = 3; 
-//#}
-//#
-//#message AccessRequest{
-//#    string file_path = 1;
-//#    int32 mode = 2;
-//#}
-//#
-//#message AccessResponse{
-//#    int32 ret = 1;
-//#    int32 server_errno = 2;
-//#}
-//#
-//#message MkdirRequest{
-//#    string dir_name = 1;
-//#    int32 mode = 2;
-//#}
-//#
-//#message MkdirResponse{
-//#    int32 ret = 1;
-//#    int32 server_errno = 2;
-//#}
-//#
-//#message RmdirRequest{
-//#    string dir_name = 1;
-//#}
-//#
-//#message RmdirResponse{
-//#    int32 ret = 1;
-//#    int32 server_errno = 2;
-//#}
-//#
-//#message OpenRequest{
-//#    string file_name = 1;
-//#    int32 flags = 2;
-//#}
-//#
-//#message OpenResponse{
-//#    int32 ret = 1;
-//#    int32 server_errno = 2;
-//#}
-//#
-//#message CreateRequest{
-//#    string file_name = 1;
-//#    int32 mode = 2;
-//#    int32 flags = 3;
-//#}
-//#
-//#message CreateResponse{
-//#    int32 ret = 1;
-//#    int32 server_errno = 2;
-//#}
-//#
-//#message StreamWriteRequest {
-//#    string path = 1;
-//#    bytes buf = 2;
-//#    int64 size = 3;
-//#    int64 offset = 4; 
-//#}
-//#
-//#message StreamWriteResponse {
-//#    int32 ret = 1; // going to set this to num_bytes in no error case
-//#    int32 server_errno = 2;
-//#}
-//#
-//#message StreamReadRequest {
-//#    string path = 1;
-//#    int64 size = 2;
-//#}
-//#
-//#message StreamReadResponse {
-//#    int32 ret = 1;
-//#    int32 server_errno = 2;
-//#    bytes buf = 3;
-//#}
-//#
-//#message UnlinkRequest{
-//#    string path = 1;
-//#}
-//#
-//#message UnlinkResponse{
-//#    int32 ret = 1;
-//#    int32 server_errno = 2;
-//#}
-//#
-//#message RenameRequest{
-//#    string old_path = 1;
-//#    string new_path = 2;
-//#}
-//#
-//#message RenameResponse{
-//#    int32 ret = 1;
-//#    int32 server_errno = 2;
-//#}
-//#
-//#message LinkRequest{
-//#    string old_path = 1;
-//#    string new_path = 2;
-//#}
-//#
-//#message LinkResponse{
-//#    int32 ret = 1;
-//#    int32 server_errno = 2;
-//#}
-//#
-//#message SymlinkRequest{
-//#    string target = 1;
-//#    string link_path = 2;
-//#}
-//#
-//#message SymlinkResponse{
-//#    int32 ret = 1;
-//#    int32 server_errno = 2;
-//#}
-//#
-//#message SpeedTestRequest{
-//#    int32 identifier = 1;
-//#    bytes data = 2;
-//#}
-//#
-//#
+message PutRequest{
+    string key = 1;
+    string value = 2;
+}
+
+message GetRequest{
+    string key = 1;
+}
+
+message GetResponse{
+    int32 ok = 1;
+    string value = 2;
+}
