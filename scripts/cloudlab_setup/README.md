@@ -3,7 +3,7 @@
 
 ## Cloudlab
 
-To generate a json config and put it on every node. Note that the location of the config can be modified in `smutils.py`.
+To generate a csv config and put it on every node. Note that the location of the config can be modified in `smutils.py`.
 
 ```bash
 python sminstaller.py --manifest manifest.xml --pvt-key ~/.ssh/id_ed25519
