@@ -1,0 +1,6 @@
+[submodule "leveldb"]
+	path = leveldb
+	url = https://github.com/google/leveldb.git
+[submodule "grpc"]
+	path = grpc
+	url = git@github.com:grpc/grpc.git

@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package ohmydb;
+
+service OhMyDB {
+    rpc TestCall(Cmd) returns(Ack) {}
+    rpc Put(PutRequest) returns(Ack) {}
+    rpc Get(GetRequest) returns(GetResponse) {}
+}
+
+message Ack {
+    int32 ok = 1;
+}
+
+message Cmd {
+    int32 sup = 1;
+}
+
+message PutRequest{
+    string key = 1;
+    string value = 2;
+}
+
+message GetRequest{
+    string key = 1;
+}
+
+message GetResponse{
+    int32 ok = 1;
+    string value = 2;
+}
