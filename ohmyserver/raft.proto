@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package raft;
+
+service Raft {
+    rpc TestCall(Cmd) returns(Ack) {}
+}
+
+message Ack {
+    int32 ok = 1;
+}
+
+message Cmd {
+    int32 sup = 1;
+}

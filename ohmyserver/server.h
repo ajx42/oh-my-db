@@ -77,10 +77,6 @@ grpc::Status OhMyDBService::Get(
     return grpc::Status::OK;
 }
 
-// parse a csv file and return a vector of ServerInfo
-// the first line of the file is header: name, intf_ip, host_ip, hostname, port, username
-// but the header columns might be unordered, so we need to find the index of each column
-// only want name, intf_ip, port
 std::vector<ServerInfo> ParseConfig(std::string filename)
 {
     std::vector<ServerInfo> servers;
