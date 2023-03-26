@@ -3,25 +3,20 @@ import logging
 import sys
 import paramiko
 import subprocess as sp
-import json
+import pandas as pd
 
 from smparser import parse_manifest
 from smutils import consts, get_connections
 from argparse import ArgumentParser
 
 def create_config(details, pkey, config_path):
-    # create json string for details
-    config = {}
-    for node in details:
-        config[node.name] = {}
-        for k, v in node._asdict().items():
-            if k == "name": continue
-            config[node.name][k] = v
+    config = pd.DataFrame(columns=details[0]._fields)
+
+    for node_info in details:
+        config = pd.concat([config, pd.DataFrame(node_info._asdict(), index=[0])], ignore_index=True)
     
     for node, client in zip(details, get_connections(details, pkey)):
-        # write config file
-        _, out, err = client.exec_command("echo \'{}\' > {}".format(json.dumps(config), config_path))
-
+        _, out, err = client.exec_command('echo "{}" > {}'.format(config.to_csv(index=False).replace('\n', '\\n'), config_path))
 
 def main():
     logging.basicConfig(level=logging.INFO)

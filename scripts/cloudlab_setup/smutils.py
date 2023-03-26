@@ -10,7 +10,7 @@ consts.values = SimpleNamespace()
 consts.keywords = SimpleNamespace()
 
 consts.locations.BUILDDIR   = os.path.join(PROJ_HOME, 'build')
-consts.locations.CONFIGPATH = os.path.join(PROJ_HOME, 'config')
+consts.locations.CONFIGPATH = './config.csv'
 
 consts.keywords.TMUX = 'tmux'
 
