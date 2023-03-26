@@ -3,10 +3,27 @@
 #include <sstream>
 #include <unistd.h>
 #include "client.h"
+#include <argparse/argparse.hpp>
 
-int main()
+int main(int argc, char **argv)
 {
-    string server_addr("0.0.0.0:50051");
+    argparse::ArgumentParser program("client");
+    program.add_argument("--server_address")
+        .required()
+        .help("Config file path");
+
+    try {
+        program.parse_args( argc, argv );
+    }
+    catch (const std::runtime_error& err) {
+        std::cerr << err.what() << std::endl;
+        std::cerr << program;
+        std::exit(1);
+    }
+
+    // parse arguments
+    auto server_addr = program.get<std::string>("--server_address");
+
     OhMyDBClient client(grpc::CreateChannel(server_addr, grpc::InsecureChannelCredentials()));
 
     client.Ping(1);
