@@ -15,6 +15,7 @@ set(OH_MY_SERVER_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/ohmyserver")
 
 # include generated source files (proto)
 include_directories("${OH_MY_SERVER_BINARY_DIR}")
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/argparse/include")
 
 add_subdirectory(ohmyserver "${OH_MY_SERVER_BINARY_DIR}")
 
