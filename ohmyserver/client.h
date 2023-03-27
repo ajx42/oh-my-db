@@ -1,8 +1,8 @@
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/channel.h>
 #include "db.grpc.pb.h"
+#pragma once
 
-using namespace std;
 class OhMyDBClient
 {
 public:
@@ -18,7 +18,7 @@ private:
 };
 
 // Note this method is only used for Testing
-int32_t OhMyDBClient::Ping(int32_t cmd)
+inline int32_t OhMyDBClient::Ping(int32_t cmd)
 {
     ohmydb::Cmd msg;
     msg.set_sup(cmd);
@@ -39,7 +39,7 @@ int32_t OhMyDBClient::Ping(int32_t cmd)
     }
 }
 
-int32_t OhMyDBClient::Put(std::string key, std::string value)
+inline int32_t OhMyDBClient::Put(std::string key, std::string value)
 {
     ohmydb::PutRequest request;
     request.set_key(key);
@@ -60,7 +60,7 @@ int32_t OhMyDBClient::Put(std::string key, std::string value)
     }
 }
 
-int32_t OhMyDBClient::Get(std::string key, std::string &value)
+inline int32_t OhMyDBClient::Get(std::string key, std::string &value)
 {
     ohmydb::GetRequest request;
     request.set_key(key);

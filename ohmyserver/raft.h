@@ -2,6 +2,7 @@
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/health_check_service_interface.h>
 #include "raft.grpc.pb.h"
+#pragma once
 
 class RaftService final : public raft::Raft::Service
 {
@@ -22,7 +23,7 @@ private:
     std::unique_ptr<raft::Raft::Stub> stub_;
 };
 
-grpc::Status RaftService::TestCall(
+inline grpc::Status RaftService::TestCall(
     grpc::ServerContext *, const raft::Cmd *cmd, raft::Ack *ack)
 {
     std::cout << "Raft client has made contact... " << std::endl;
@@ -30,7 +31,7 @@ grpc::Status RaftService::TestCall(
     return grpc::Status::OK;
 }
 
-int32_t RaftClient::Ping(int32_t cmd)
+inline int32_t RaftClient::Ping(int32_t cmd)
 {
     raft::Cmd msg;
     msg.set_sup(cmd);

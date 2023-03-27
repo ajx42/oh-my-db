@@ -2,8 +2,8 @@
 #include <string>
 #include <sstream>
 #include <unistd.h>
-#include "client.h"
 #include <argparse/argparse.hpp>
+#include "client.h"
 
 int main(int argc, char **argv)
 {
@@ -28,31 +28,31 @@ int main(int argc, char **argv)
 
     client.Ping(1);
 
-    string value;
-    cout << "Get : Hello...\n";
+    std::string value;
+    std::cout << "Get : Hello...\n";
     if (client.Get("Hello", value) < 0)
     {
-        cout << "Get failed! Key maybe not present.\n";
+        std::cout << "Get failed! Key maybe not present.\n";
     }
     else
     {
-        cout << "Returned : " << value << "\n";
+        std::cout << "Returned : " << value << "\n";
     }
 
-    cout << "Put : Hello...\n";
+    std::cout << "Put : Hello...\n";
     if (client.Put("Hello", "World") < 0)
     {
-        cout << "Put failed!\n";
+        std::cout << "Put failed!\n";
     }
 
-    cout << "Get : Hello...\n";
+    std::cout << "Get : Hello...\n";
     if (client.Get("Hello", value) < 0)
     {
-        cout << "Get failed! Key maybe not present.\n";
+        std::cout << "Get failed! Key maybe not present.\n";
     }
     else
     {
-        cout << "Returned : " << value << "\n";
+        std::cout << "Returned : " << value << "\n";
     }
 
     return 0;
