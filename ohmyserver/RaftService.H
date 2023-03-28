@@ -1,8 +1,10 @@
-#include <grpcpp/ext/proto_server_reflection_plugin.h>
-#include <grpcpp/grpcpp.h>
-#include <grpcpp/health_check_service_interface.h>
-#include "raft.grpc.pb.h"
 #pragma once
+
+#include <grpcpp/grpcpp.h>
+#include <grpcpp/ext/proto_server_reflection_plugin.h>
+#include <grpcpp/health_check_service_interface.h>
+
+#include "raft.grpc.pb.h"
 
 class RaftService final : public raft::Raft::Service
 {

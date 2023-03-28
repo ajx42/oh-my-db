@@ -4,8 +4,9 @@
 #include <unistd.h>
 #include <leveldb/db.h>
 #include <argparse/argparse.hpp>
-#include "server.h"
-#include "raft.h"
+
+#include "DatabaseService.H"
+#include "RaftService.H"
 
 std::vector<ServerInfo> ParseConfig(std::string filename)
 {

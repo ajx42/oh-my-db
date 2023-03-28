@@ -1,12 +1,15 @@
+#pragma once
+
 #include <string>
 #include <unordered_map>
 #include <vector>
 #include <fstream>
-#include <grpcpp/ext/proto_server_reflection_plugin.h>
+
 #include <grpcpp/grpcpp.h>
+#include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/health_check_service_interface.h>
+
 #include "db.grpc.pb.h"
-#pragma once
 
 struct ServerInfo {
     std::string ip;

@@ -1,7 +1,8 @@
+#pragma once
+
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/channel.h>
 #include "db.grpc.pb.h"
-#pragma once
 
 class OhMyDBClient
 {

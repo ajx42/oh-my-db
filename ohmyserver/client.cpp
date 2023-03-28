@@ -3,7 +3,8 @@
 #include <sstream>
 #include <unistd.h>
 #include <argparse/argparse.hpp>
-#include "client.h"
+
+#include "DatabaseClient.H"
 
 int main(int argc, char **argv)
 {
