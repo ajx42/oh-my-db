@@ -12,6 +12,8 @@ consts.keywords = SimpleNamespace()
 consts.locations.BUILDDIR   = os.path.join(PROJ_HOME, 'build')
 consts.locations.CONFIGPATH = './config.csv'
 
+consts.values.raft_port = 8080
+
 consts.keywords.TMUX = 'tmux'
 
 def __get_script(script, session):

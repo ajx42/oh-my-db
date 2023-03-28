@@ -1,99 +1,119 @@
 #include <iostream>
-#include <leveldb/db.h>
 #include <string>
 #include <sstream>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
 #include <unistd.h>
+#include <leveldb/db.h>
+#include <argparse/argparse.hpp>
 
-#include <grpcpp/ext/proto_server_reflection_plugin.h>
-#include <grpcpp/grpcpp.h>
-#include <grpcpp/health_check_service_interface.h>
-#include "db.grpc.pb.h"
+#include "DatabaseService.H"
+#include "RaftService.H"
 
-#define PORT 8080
-
-class OhMyDBService final : public ohmydb::OhMyDB::Service
+std::vector<ServerInfo> ParseConfig(std::string filename)
 {
-private:
-    leveldb::DB *db;
-    leveldb::Options options;
+    std::vector<ServerInfo> servers;
+    std::ifstream file(filename);
+    std::string line;
+    // parse header
+    std::getline(file, line);
+    std::stringstream ss(line);
+    std::string token;
+    std::unordered_map<std::string, int> header;
 
-public:
-    explicit OhMyDBService()
+    while (std::getline(ss, token, ','))
     {
-        // leveldb setup
-        options.create_if_missing = true;
-        leveldb::Status status = leveldb::DB::Open(options, "/tmp/testdb", &db);
-        if (!status.ok())
+        header[token] = header.size();
+    }
+
+    // parse each node
+    while (std::getline(file, line))
+    {
+        // check if line is empty
+        if (line.empty()) break;
+        std::stringstream ss(line);
+        std::string token;
+        std::vector<std::string> tokens;
+        while (getline(ss, token, ','))
         {
-            std::cerr << "Unable to open/create database" << std::endl;
+            tokens.push_back(token);
         }
+        ServerInfo server;
+        server.name = tokens[header["name"]];
+        server.ip = tokens[header["intf_ip"]];
+        server.port = stoi(tokens[header["port"]]);
+        servers.push_back(server);
     }
-
-    grpc::Status TestCall(grpc::ServerContext *, const ohmydb::Cmd *, ohmydb::Ack *);
-    grpc::Status Put(grpc::ServerContext *, const ohmydb::PutRequest *, ohmydb::Ack *);
-    grpc::Status Get(grpc::ServerContext *, const ohmydb::GetRequest *, ohmydb::GetResponse *);
-};
-
-grpc::Status OhMyDBService::TestCall(
-    grpc::ServerContext *, const ohmydb::Cmd *cmd, ohmydb::Ack *ack)
-{
-    std::cout << "Client has made contact... " << std::endl;
-    ack->set_ok(cmd->sup());
-    return grpc::Status::OK;
+    return servers;
 }
 
-grpc::Status OhMyDBService::Put(
-    grpc::ServerContext *, const ohmydb::PutRequest *request, ohmydb::Ack *ack)
+int main(int argc, char **argv)
 {
-    leveldb::Status status = db->Put(leveldb::WriteOptions(), request->key(), request->value());
-    if (status.ok())
-    {
-        ack->set_ok(0);
-    }
-    else
-    {
-        ack->set_ok(-1);
-    }
-    return grpc::Status::OK;
-}
+    argparse::ArgumentParser program("server");
+    program.add_argument("--config")
+        .required()
+        .help("Config file path");
 
-grpc::Status OhMyDBService::Get(
-    grpc::ServerContext *, const ohmydb::GetRequest *request, ohmydb::GetResponse *response)
-{
-    std::string value;
-    leveldb::Status status = db->Get(leveldb::ReadOptions(), request->key(), &value);
-    if (status.ok())
-    {
-        response->set_ok(0);
-        response->set_value(value);
+    program.add_argument("--db_port")
+        .required()
+        .help("DB service port");
+
+    program.add_argument("--raft_port")
+        .required()
+        .help("Raft service port");
+
+    try {
+        program.parse_args( argc, argv );
     }
-    else
-    {
-        response->set_ok(-1);
+    catch (const std::runtime_error& err) {
+        std::cerr << err.what() << std::endl;
+        std::cerr << program;
+        std::exit(1);
     }
 
-    return grpc::Status::OK;
-}
+    // parse arguments
+    auto db_port = program.get<std::string>("--db_port");
+    auto raft_port = program.get<std::string>("--raft_port");
+    auto config_path = program.get<std::string>("--config");
 
-int main()
-{
-    std::string server_addr("0.0.0.0:50051");
-    OhMyDBService service;
-
+    auto servers = ParseConfig(config_path);
+    
+    
     grpc::EnableDefaultHealthCheckService(true);
     grpc::reflection::InitProtoReflectionServerBuilderPlugin();
     grpc::ServerBuilder builder;
 
-    builder.AddListeningPort(server_addr, grpc::InsecureServerCredentials());
-    builder.RegisterService(&service);
+    // start raft server
+    RaftService raft_service;
+    std::string raft_server_addr("0.0.0.0:" + raft_port);
+    builder.AddListeningPort(raft_server_addr, grpc::InsecureServerCredentials());
+    builder.RegisterService(&raft_service);
 
-    std::unique_ptr<grpc::Server> server(builder.BuildAndStart());
-    std::cout << "Server listening on " << server_addr << std::endl;
+    std::unique_ptr<grpc::Server> raft_server(builder.BuildAndStart());
+    std::cout << "Raft server listening on " << raft_server_addr << std::endl;
 
-    server->Wait();
+    // test that we can connect to all servers with grpc
+    for (auto server : servers)
+    {
+        std::cout << "Testing connection to " << server.name << " at " << server.ip << ":" << server.port << std::endl;
+        std::string address(server.ip + ":" + std::to_string(server.port));
+        RaftClient client(grpc::CreateChannel(address, grpc::InsecureChannelCredentials()));
+
+        while (client.Ping(1) < 0)
+        {
+            std::cout << "Ping failed, retrying in 1 second" << std::endl;
+            sleep(1);
+        }
+    }
+
+    // start db server
+    OhMyDBService db_service;
+    std::string db_server_addr("0.0.0.0:" + db_port);
+    builder.AddListeningPort(db_server_addr, grpc::InsecureServerCredentials());
+    builder.RegisterService(&db_service);
+
+    std::unique_ptr<grpc::Server> db_server(builder.BuildAndStart());
+    std::cout << "DB Server listening on " << db_server_addr << std::endl;
+
+    db_server->Wait();
 
     return 0;
 }
