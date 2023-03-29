@@ -11,11 +11,7 @@
 
 #include "db.grpc.pb.h"
 
-struct ServerInfo {
-    std::string ip;
-    int port;
-    std::string name;
-};
+#include "OhMyConfig.H"
 
 class OhMyDBService final : public ohmydb::OhMyDB::Service
 {

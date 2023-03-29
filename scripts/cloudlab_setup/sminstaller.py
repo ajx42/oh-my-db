@@ -19,6 +19,8 @@ def create_config(details, pkey, config_path, raft_port):
     for node, client in zip(details, get_connections(details, pkey)):
         _, out, err = client.exec_command('echo "{}" > {}'.format(config.to_csv(index=False).replace('\n', '\\n'), config_path))
 
+    print(config.to_csv(index=False))
+
 def main():
     logging.basicConfig(level=logging.INFO)
 

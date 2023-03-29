@@ -61,6 +61,7 @@ target_link_libraries(db_grpc_proto
 
 # Add the executable
 add_executable(server server.cpp)
+add_executable(replica replica.cpp)
 
 # Proto file
 get_filename_component(raft_proto "raft.proto" ABSOLUTE)
@@ -97,5 +98,11 @@ target_link_libraries(server leveldb)
 target_link_libraries(server db_grpc_proto)
 target_link_libraries(server raft_grpc_proto)
 
+target_link_libraries(replica leveldb)
+target_link_libraries(replica db_grpc_proto)
+target_link_libraries(replica raft_grpc_proto)
+
 add_executable(client client.cpp)
 target_link_libraries(client db_grpc_proto)
+
+

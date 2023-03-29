@@ -3,7 +3,8 @@ syntax = "proto3";
 package raft;
 
 service Raft {
-    rpc TestCall(Cmd) returns(Ack) {}
+  rpc TestCall(Cmd) returns(Ack) {}
+  rpc AppendEntries(AppendEntriesArg) returns(Ack) {}
 }
 
 message Ack {
@@ -13,3 +14,8 @@ message Ack {
 message Cmd {
     int32 sup = 1;
 }
+
+message AppendEntriesArg {
+  bytes entries = 1;
+}
+
