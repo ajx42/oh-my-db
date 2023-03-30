@@ -3,6 +3,7 @@
 #include <future>
 #include <thread>
 #include <list>
+#include <mutex>
 
 namespace raft {
 
@@ -24,7 +25,7 @@ public:
 
 private:
   PromiseStore() {}
-  
+  std::mutex storeMutex_;   
   store_t store_;
 };
 
@@ -32,6 +33,7 @@ template <class T>
 typename PromiseStore<T>::handle_t
 PromiseStore<T>::insert( std::promise<T>&& inp )
 {
+  std::lock_guard<std::mutex> lock( storeMutex_ );
   store_.emplace_back( std::move( inp ) );
   auto it = store_.end();
   --it;
@@ -41,6 +43,7 @@ PromiseStore<T>::insert( std::promise<T>&& inp )
 template <class T>
 std::promise<T> PromiseStore<T>::getAndRemove( handle_t it )
 {
+  std::lock_guard<std::mutex> lock( storeMutex_ );
   auto ret = std::move(*it);
   store_.erase( it );
   return ret;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <vector>
 #include <optional>
 #include <utility>
 #include <future>
@@ -22,10 +23,18 @@ struct Operation {
   using arg_t = std::variant<getarg_t, putarg_t>;
   using res_t = std::variant<getres_t, putres_t>;
   
-  enum {GET, PUT} kind;
+  enum OpType : int32_t { GET = 0, PUT = 1 };
+
+  OpType kind;
   arg_t args;
   std::optional<typename PromiseStore<res_t>::handle_t> promiseHandle;
-  
+
+  Operation<KeyT, ValT> withoutPromise() const {
+    auto copy = *this;
+    copy.promiseHandle.reset();
+    return copy;
+  }
+
   void execute() {
     std::cout << "EXEC: " << str() << std::endl;
   
@@ -89,7 +98,7 @@ struct LogEntry {
 struct TransportEntry {
   int32_t term;
   int32_t index;
-  int32_t kind;
+  RaftOp::OpType kind;
   int32_t arg1;
   int32_t arg2;
 } __attribute__((__packed__));
@@ -100,6 +109,29 @@ enum class Role
   Candidate,
   Leader,
   Dead,
+};
+
+struct AppendEntriesParams {
+  struct AppendLogEntry {
+    int32_t term;
+    int32_t index;
+    RaftOp op;
+  };
+  std::vector<AppendLogEntry> entries;
+};
+
+struct AppendEntriesRet {
+  bool ok = false;
+  // @TODO
+};
+
+struct RequestVoteParams {
+  // @TODO  
+};
+
+struct RequestVoteRet {
+  bool ok = false;
+  // @TODO
 };
 
 } // end namespace 

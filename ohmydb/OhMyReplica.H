@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ConsensusUtils.H"
 #include "OhMyConfig.H"
 #include "OhMyRaft.H"
 #include "RaftService.H"
@@ -11,10 +12,23 @@ public:
     return obj;
   }
 
-  void initialiseServices( std::vector<ServerInfo> servers, int id ); 
+  // Initialise replica services, this should bring up all RPC interfaces
+  // and connect to peers as well. waitForPeers makes the replica ping each
+  // peer before starting operation. This should be used for testing only!
+  void initialiseServices(
+      std::vector<ServerInfo> servers, int id, bool waitForPeers ); 
 
+  // These methods are accessed by the Database RPC server layer. But exposing
+  // them as public methods here allows for quick testing :D
   std::optional<int> get( int key );
   bool put( std::pair<int, int> kvp );
+
+  // Similarly providing handle for AppendEntries and RequestVote here. These
+  // are called from the Raft RPC interface during normal operation. These should
+  // not be used by the user. Maybe we can move these to private later.
+  // See ConsensusUtils for the struct definitions.
+  raft::AppendEntriesRet AppendEntries( raft::AppendEntriesParams args );
+  raft::RequestVoteRet RequestVote( raft::RequestVoteParams args ); 
 
   void start();
   void stop();
@@ -32,7 +46,7 @@ private:
 };
 
 inline void ReplicaManager::initialiseServices(
-    std::vector<ServerInfo> servers, int id )
+    std::vector<ServerInfo> servers, int id, bool waitForPeers )
 {
   auto raftPort = servers[id].port;
   auto raftIp = servers[id].ip;
@@ -58,13 +72,18 @@ inline void ReplicaManager::initialiseServices(
     auto address = servers[i].ip + ":" + std::to_string(servers[i].port); 
     peers.push_back( RaftClient(grpc::CreateChannel(
         address, grpc::InsecureChannelCredentials())));
-   
-    while ( peers.back().Ping(1) < 0 ) {
-      sleep(1);
+    
+    if ( waitForPeers ) {
+      while ( peers.back().Ping(1) < 0 ) {
+        sleep(1);
+      }
+      LogInfo( "ping OK: " + std::to_string(i) );
     }
-    LogInfo( "ping OK: " + std::to_string(i) );
   }
   raft_.attachPeers( std::move(peers) );
+  raft_.setId( id ); 
+  LogInfo( "Services Started: Raft Initialised" );
+
 }
 
 inline void ReplicaManager::start()
@@ -115,5 +134,15 @@ inline bool ReplicaManager::put( std::pair<int, int> kvp )
   raft_.submit( op );
 
   return std::get<bool>( ft.get() );
+}
+
+inline raft::AppendEntriesRet ReplicaManager::AppendEntries( raft::AppendEntriesParams args )
+{
+  return raft_.AppendEntries( args );
+}
+
+inline raft::RequestVoteRet ReplicaManager::RequestVote( raft::RequestVoteParams args )
+{
+  return raft_.RequestVote( args );
 }
 

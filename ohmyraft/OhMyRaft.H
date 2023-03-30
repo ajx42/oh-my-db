@@ -31,21 +31,35 @@ public:
   }
 
   RaftManager() {}
-  
+  ~RaftManager();
+
   void attachPeers( std::vector<ClientT>&& peers ) {
     peers_ = std::move(peers);
     LogInfo("attaching peers");
   }
 
+  // configuration
+  void setId( int id ) {
+    state_.PeerId = id;
+  }
+
+  // control points
   void start();
-  void submit( RaftOp op );
-  void raftImpl();
-  void executerImpl();
   void stop();
 
-  ~RaftManager();
+  // job submission
+  void submit( RaftOp op );
 
-private:
+  // raft rpc implementations
+  AppendEntriesRet AppendEntries( AppendEntriesParams );
+  RequestVoteRet RequestVote( RequestVoteParams );
+
+private:  
+  // raft core logic implementation
+  // these must be run on separate threads
+  void raftImpl();
+  void executerImpl();
+
   std::vector<ClientT> peers_;
   std::vector<LogEntry> logs_;
 
@@ -87,22 +101,20 @@ void RaftManager<T>::raftImpl()
       });
     }
 
-    std::vector<TransportEntry> transportVec;
+    AppendEntriesParams args;
     
     int cnt = 0;
     for ( const auto& op : raftIn_ ) {
-      transportVec.push_back( TransportEntry {
+      args.entries.push_back( AppendEntriesParams::AppendLogEntry {
         .term = 0,
         .index = cnt++,
-        .kind = op.kind == RaftOp::GET ? 0 : 1,
-        .arg1 = op.kind == RaftOp::GET ? std::get<RaftOp::getarg_t>( op.args ) : std::get<RaftOp::putarg_t>( op.args ).first,
-        .arg2 = op.kind == RaftOp::GET ? 0 : std::get<RaftOp::putarg_t>( op.args ).second
+        .op = op.withoutPromise(),
       });
     }
   
-    if ( ! transportVec.empty() ) {
+    if ( state_.PeerId  == 0 && ! args.entries.empty() ) {
       for ( auto& peer: peers_ ) {
-        peer.AppendEntries( transportVec ); 
+        peer.AppendEntries( args ); 
       }
     }
   
@@ -157,6 +169,20 @@ RaftManager<T>::~RaftManager()
   stop();
 }
 
+template <class T>
+AppendEntriesRet RaftManager<T>::AppendEntries( AppendEntriesParams args )
+{
+  for ( auto e: args.entries ) {
+    std::cout << e.op.str() << std::endl;
+    submit( e.op );
+  }
+  return {};
+}
 
-
+template <class T>
+RequestVoteRet RaftManager<T>::RequestVote( RequestVoteParams args )
+{
+  (void) args;
+  return {};
+}
 } // end namespace

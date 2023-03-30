@@ -60,8 +60,8 @@ target_link_libraries(db_grpc_proto
   ${_PROTOBUF_LIBPROTOBUF})
 
 # Add the executable
-add_executable(server server.cpp)
-add_executable(replica replica.cpp)
+add_executable(server server.cpp )
+add_executable(replica replica.cpp )
 
 # Proto file
 get_filename_component(raft_proto "raft.proto" ABSOLUTE)
@@ -88,17 +88,27 @@ add_library(raft_grpc_proto
   ${raft_proto_srcs}
   ${raft_proto_hdrs})
 
-target_link_libraries(raft_grpc_proto
+target_link_libraries(raft_grpc_proto 
+  ${_REFLECTION}
+  ${_GRPC_GRPCPP}
+  ${_PROTOBUF_LIBPROTOBUF})
+
+add_library(ohmyraftrpc "${CMAKE_CURRENT_SOURCE_DIR}/RaftServiceImpl.C")
+
+target_link_libraries(ohmyraftrpc
+  ${raft_grpc_proto}
   ${_REFLECTION}
   ${_GRPC_GRPCPP}
   ${_PROTOBUF_LIBPROTOBUF})
 
 # Link against LevelDB and other required libraries
 target_link_libraries(server leveldb)
+target_link_libraries(server ohmyraftrpc)
 target_link_libraries(server db_grpc_proto)
 target_link_libraries(server raft_grpc_proto)
 
 target_link_libraries(replica leveldb)
+target_link_libraries(replica ohmyraftrpc)
 target_link_libraries(replica db_grpc_proto)
 target_link_libraries(replica raft_grpc_proto)
 

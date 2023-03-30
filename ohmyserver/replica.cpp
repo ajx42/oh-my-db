@@ -55,17 +55,15 @@ int main(int argc, char **argv)
   auto selfDetails = servers[id];
   printServer("MyDetails", id);
 
-  ReplicaManager::Instance().initialiseServices( servers, id );   
-  
+  ReplicaManager::Instance().initialiseServices( servers, id, true );  
   ReplicaManager::Instance().start();
 
-  if ( id == 0 ) {
-  ReplicaManager::Instance().put(std::make_pair(1, 2) );
-
-  std::cout << ReplicaManager::Instance().get(1).value_or(-1) << std::endl;
+  // -- @FIXME: remove once done, for test only
+  if ( id == 0 ) {    
+    ReplicaManager::Instance().put( std::make_pair(1, 2) );
+    LogInfo( "Received Output: " + std::to_string( ReplicaManager::Instance().get(1).value_or(-1) ) );
   }
-  
-  LogInfo("services started");
+  // -- 
 
   while(1) { std::this_thread::sleep_for(std::chrono::seconds(10)); }
 }

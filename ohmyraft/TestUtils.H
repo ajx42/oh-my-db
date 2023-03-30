@@ -20,7 +20,8 @@ private:
 
 class RaftClientProxy {
 public:
-  int32_t AppendEntries( std::vector<TransportEntry> ) { return 0; }
+  AppendEntriesRet AppendEntries( AppendEntriesParams ) { return {}; }
+  RequestVoteRet RequestVote( RequestVoteParams ) { return {}; }
 };
 
 using Follower = FollowerProxy;
