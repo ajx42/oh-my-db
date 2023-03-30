@@ -60,6 +60,7 @@ int32_t RaftClient::Ping(int32_t cmd)
     }
 }
 
+
 raft::AppendEntriesRet RaftClient::AppendEntries( raft::AppendEntriesParams args )
 {
   std::vector<raft::TransportEntry> entriesToShip;

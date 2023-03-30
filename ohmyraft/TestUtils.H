@@ -18,6 +18,8 @@ private:
   int id_;
 };
 
+// This is just a proxy to test other stuff. Don't add logic here.
+// The real deal is in RaftService and OhMyRaft
 class RaftClientProxy {
 public:
   AppendEntriesRet AppendEntries( AppendEntriesParams ) { return {}; }

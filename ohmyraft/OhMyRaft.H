@@ -93,6 +93,8 @@ void RaftManager<T>::raftImpl()
     std::swap( dispatchOut_, raftIn_ ); 
     raftInMutex_.unlock();
 
+    // @FIXME: All this logic is a placeholder till we actually build out RAFT.
+ 
     // append received entries to logs
     for ( const auto& op : raftIn_ ) {
       logs_.push_back( LogEntry {
@@ -168,6 +170,12 @@ RaftManager<T>::~RaftManager()
 {
   stop();
 }
+
+// RAFT Standard RPC Implementations. @TODO: Note the structs for args and results are
+// placeholders, please fill them up ConsensusUtils.H.
+// Furthermore, These calls land in RPCServiceImpl.C where data is repackaged to RPC-able
+// format. So after implementing here, the packaging logic also needs to be implemented.
+// Note calls can happen in parallel, so ensure thread safety while accessing state.
 
 template <class T>
 AppendEntriesRet RaftManager<T>::AppendEntries( AppendEntriesParams args )
