@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ConsensusUtils.H"
+
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/health_check_service_interface.h>
@@ -12,6 +14,7 @@ public:
     explicit RaftService() {}
 
     grpc::Status TestCall(grpc::ServerContext *, const raft::Cmd *, raft::Ack *);
+    grpc::Status AppendEntries(grpc::ServerContext*, const raft::AppendEntriesArg*, raft::Ack*);
 };
 
 class RaftClient
@@ -20,36 +23,9 @@ public:
     RaftClient(std::shared_ptr<grpc::Channel> channel)
         : stub_(raft::Raft::NewStub(channel)) {}
     int32_t Ping(int32_t cmd);
-
+    raft::AppendEntriesRet AppendEntries( raft::AppendEntriesParams );
+    raft::RequestVoteRet RequestVote( raft::RequestVoteParams );
 private:
     std::unique_ptr<raft::Raft::Stub> stub_;
 };
 
-inline grpc::Status RaftService::TestCall(
-    grpc::ServerContext *, const raft::Cmd *cmd, raft::Ack *ack)
-{
-    std::cout << "Raft client has made contact... " << std::endl;
-    ack->set_ok(cmd->sup());
-    return grpc::Status::OK;
-}
-
-inline int32_t RaftClient::Ping(int32_t cmd)
-{
-    raft::Cmd msg;
-    msg.set_sup(cmd);
-    raft::Ack reply;
-
-    grpc::ClientContext context;
-
-    auto status = stub_->TestCall(&context, msg, &reply);
-    if (status.ok())
-    {
-        std::cerr << "Received OK" << std::endl;
-        return reply.ok();
-    }
-    else
-    {
-        std::cerr << "RPC Failed" << std::endl;
-        return -1;
-    }
-}
