@@ -21,11 +21,14 @@ enum raft_role {follower, candidate, leader};
 struct RaftState
 {
   int PeerId = 0;
+  std::chrono::time_point<std::chrono::system_clock> electionResetEvent;
+  std::chrono::milliseconds electionTimeout;
   //raft election state data
-  size_t votes;
-  size_t term;
+  int votedFor;
+  int term;
   raft_role role;
-  bool heartbeat;
+  std::vector<int> nextIndex;
+  std::vector<int> matchIndex;
 };
 
 template <class ClientT>
@@ -33,11 +36,9 @@ class RaftManager
 {
 public:
   RaftManager( int id ) { 
-    state_.term = 0;
-    state_.votes = 0;
-    state_.role = follower;
-    state_.heartbeat = true; // For now, on start up, not assuming a timeout has occured
     state_.PeerId = id;
+    state_.term = 0;
+    state_.votedFor = -1;
     logs_.reserve( 10000 ); 
   }
 
@@ -47,6 +48,8 @@ public:
   void attachPeers( std::vector<ClientT>&& peers ) {
     peers_ = std::move(peers);
     LogInfo("attaching peers");
+    state_.nextIndex = std::vector<int>(peers_.size(), 0);
+    state_.matchIndex = std::vector<int>(peers_.size(), -1);
   }
 
   // configuration
@@ -89,6 +92,13 @@ private:
   bool keepRunning_ = false;
 
   RaftState state_;
+  
+  void BecomeLeader();
+  void BecomeFollower(int);
+  void BecomeCandidate(int);
+
+  std::chrono::milliseconds GetElectionTimeout();
+  void StartElection();
 };
 
 template <class T>
@@ -193,6 +203,12 @@ RaftManager<T>::~RaftManager()
 template <class T>
 AppendEntriesRet RaftManager<T>::AppendEntries( AppendEntriesParams args )
 {
+  // check if heartbeat
+  if ( args.entries.empty() ) {
+    state_.electionResetEvent = std::chrono::system_clock::now();
+    return {};
+  }
+
   for ( auto e: args.entries ) {
     std::cout << e.op.str() << std::endl;
     submit( e.op );
@@ -203,69 +219,182 @@ AppendEntriesRet RaftManager<T>::AppendEntries( AppendEntriesParams args )
 template <class T>
 RequestVoteRet RaftManager<T>::RequestVote( RequestVoteParams args )
 {
-  (void) args;
-  return {};
+  LogInfo("RequestVote from " + std::to_string(args.candidateId));
+  LogInfo("term: " + std::to_string(args.term) + 
+          " lastLogTerm: " + std::to_string(args.lastLogTerm) + 
+          " lastLogIndex: " + std::to_string(args.lastLogIndex))
+  
+  RequestVoteRet ret;
+
+  int lastLogIndex = logs_.size() - 1;
+  int lastLogTerm = -1;
+  if ( lastLogIndex >= 0 ) {
+    lastLogTerm = logs_[lastLogIndex].term;
+  }
+
+  if ( args.term > state_.term ) {
+    // become follower
+    state_.term = args.term;
+    state_.role = follower;
+    state_.votedFor = -1;
+  }
+
+  if ( args.term == state_.term && ( state_.votedFor == -1 || state_.votedFor == args.candidateId ) &&
+       ( args.lastLogTerm >= lastLogTerm || 
+         ( args.lastLogTerm == lastLogTerm && args.lastLogIndex >= lastLogIndex ))) {
+    // vote for candidate
+    ret.voteGranted = true;
+    state_.votedFor = args.candidateId;
+    state_.electionResetEvent = std::chrono::system_clock::now();
+  } else {
+    ret.voteGranted = false;
+  }
+
+  ret.term = state_.term;
+  LogInfo("Replying to RequestVote from " + std::to_string(args.candidateId));
+  LogInfo("term: " + std::to_string(ret.term) + 
+          " voteGranted: " + std::to_string(ret.voteGranted))
+
+  return ret;
 }
+
+template <class T>
+void RaftManager<T>::BecomeFollower( int term )
+{
+  state_.term = term;
+  state_.role = follower;
+  state_.votedFor = -1;
+}
+
+template <class T>
+void RaftManager<T>::BecomeCandidate(int term)
+{
+  state_.term = term;
+  state_.role = candidate;
+  state_.electionResetEvent = std::chrono::system_clock::now();
+  state_.electionTimeout = GetElectionTimeout();
+  state_.votedFor = state_.PeerId;
+}
+
+template <class T>
+void RaftManager<T>::BecomeLeader()
+{
+  state_.role = leader;
+  state_.electionResetEvent = std::chrono::system_clock::now();
+  state_.electionTimeout = GetElectionTimeout();
+  state_.votedFor = -1;
+  // @TODO: nextIndex, matchIndex
+  state_.nextIndex = std::vector<int>(peers_.size(), logs_.size());
+  state_.matchIndex = std::vector<int>(peers_.size(), -1);
+}
+
+template <class T>
+std::chrono::milliseconds RaftManager<T>::GetElectionTimeout()
+{
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_int_distribution<> timeOutGen(150, 300);
+  std::chrono::milliseconds timeOut = std::chrono::milliseconds{timeOutGen(gen)};
+  return timeOut;
+}
+
+template <class T>
+void RaftManager<T>::StartElection()
+{
+  // become candidate
+  BecomeCandidate(state_.term + 1);
+
+  LogInfo("Starting election for term: " + std::to_string(state_.term));
+  LogInfo("Voted for: " + std::to_string(state_.votedFor));
+
+  int startTerm = state_.term;
+  int lastLogIndex = logs_.size() - 1;
+  int lastLogTerm = -1;
+  if ( lastLogIndex >= 0 ) {
+    lastLogTerm = logs_[lastLogIndex].term;
+  }
+
+  // Send RequestVote RPCs to all peers and count votes
+  int votesReceived = 1; // vote for self
+  raft::RequestVoteParams args = {
+    .candidateId = state_.PeerId,
+    .term = state_.term,
+    .lastLogIndex = lastLogIndex,
+    .lastLogTerm = lastLogTerm
+  };
+  for ( auto& peer: peers_ ) {
+    raft::RequestVoteRet response = peer.RequestVote( args );
+
+    // check timeout
+    if ( std::chrono::system_clock::now() - state_.electionResetEvent > state_.electionTimeout ) {
+      return; // election timed out, will start a new one in the next iteration of busy()
+    }
+
+    // check if we are no longer candidate (new leader exist and we get heartbeat)
+    if ( state_.role != candidate ) {
+      return;
+    }
+
+    // check if new term
+    if ( response.term > startTerm ) {
+      BecomeFollower( response.term );
+      return;
+    }
+
+    if ( response.term == startTerm && response.voteGranted ) {
+      votesReceived++;
+
+      // check if majority votes received
+      if ( votesReceived > peers_.size() / 2 ) {
+        BecomeLeader();
+        return;
+      }
+    }
+  }
+
+}
+
 
 template <class T>
 void RaftManager<T>::busy()
 {
+  // start off as follower
+  BecomeFollower(0);
 
   // Used for selecting election timeouts
-  std::random_device rd;
-  std::mt19937 gen(rd());
-  std::uniform_int_distribution<> timeOutGen(150, 300);
   size_t leaderHeartBeatInterval = 100;
 
   while (1)
   {
-
     if (state_.role == leader)
     {
-      // Send heartbeat RPC
+      // Send heartbeat RPCs to all peers
+      raft::AppendEntriesParams args = {
+        .term = state_.term,
+        .leaderId = state_.PeerId,
+        .prevLogIndex = -1, // not important
+        .prevLogTerm = -1, // not important
+        .entries = {},
+        .leaderCommit = -1, // not important
+      };
+      for (auto& peer : peers_)
+      {
+        peer.AppendEntries(args);
+      }
+
       std::this_thread::sleep_for(std::chrono::milliseconds(leaderHeartBeatInterval));
     }
     else if (state_.role == follower)
     {
-      std::this_thread::sleep_for(std::chrono::milliseconds(timeOutGen(gen)));
-
-      if (state_.heartbeat)
+      if (std::chrono::system_clock::now() - state_.electionResetEvent > state_.electionTimeout)
       {
-        // Heartbeat was received, leader is still active
-
-        state_.heartbeat = false; // Heartbeat RPC will set this back to true
-      }
-      else
-      {
-        // No heartbeat received, begin election.
-
-        // Increment current term, switch to candidate state, vote for self.
-        state_.term++;
-        state_.role = candidate;
-        state_.votes = 1;
-
-        // Request votes from others:
-        raft::RequestVoteParams args; // TODO: Fill in parameters
-        RequestVote(args);
+        // No heartbeat => lection timeout, start election
+        StartElection();
       }
     }
     else if (state_.role == candidate)
     {
-      // if heartbeat
-      // Someone else won the election and sent a valid heartbeat.
-      // this->state = follower
-
-      // if votes >= (N/2)+1
-      // win election, this->state = leader
-
-      // else
-      // Didn't win within election time limit, timeout for now
-      // this->state = follower
-
-      // TODO: We should detect winning the majority vote earlier
-      // than the election timeout period. The longer we wait,
-      // the more likely servers that voted for us will timeout
-      // and start another election
+      StartElection();
     }
   }
 }

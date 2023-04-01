@@ -117,7 +117,12 @@ struct AppendEntriesParams {
     int32_t index;
     RaftOp op;
   };
+  int32_t term;
+  int32_t leaderId;
+  int32_t prevLogIndex;
+  int32_t prevLogTerm;
   std::vector<AppendLogEntry> entries;
+  int32_t leaderCommit;
 };
 
 struct AppendEntriesRet {
@@ -126,12 +131,15 @@ struct AppendEntriesRet {
 };
 
 struct RequestVoteParams {
-  // @TODO  
+  int candidateId;
+  int term;
+  int lastLogIndex;
+  int lastLogTerm;
 };
 
 struct RequestVoteRet {
-  bool ok = false;
-  // @TODO
+  int term;
+  bool voteGranted;
 };
 
 } // end namespace 

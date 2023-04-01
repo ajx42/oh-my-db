@@ -3,21 +3,26 @@
 #include "WowLogger.H"
 
 grpc::Status RaftService::TestCall(
-    grpc::ServerContext *, const raft::Cmd *cmd, raft::Ack *ack)
+    grpc::ServerContext *, const raftproto::Cmd *cmd, raftproto::Ack *ack)
 {
     ack->set_ok(cmd->sup());
     return grpc::Status::OK;
 }
 
 grpc::Status RaftService::AppendEntries(
-    grpc::ServerContext*, const raft::AppendEntriesArg* args, raft::Ack* ack )
+    grpc::ServerContext*, const raftproto::AppendEntriesRequest* request, raftproto::Ack* response )
 {
   // The idea is to decode the received args and repackage them to match exact
   // raft specification. So that our Raft impl  doesn't need to handle decoding.
   raft::AppendEntriesParams param;
+  param.term = request->term();
+  param.leaderId = request->leader_id();
+  param.prevLogIndex = request->prev_log_index();
+  param.prevLogTerm = request->prev_log_term();
+  param.leaderCommit = request->leader_commit();
 
-  for ( size_t i = 0; i < args->entries().size(); i += sizeof(raft::TransportEntry) ) {
-    auto& entry = *reinterpret_cast<const raft::TransportEntry*>( args->entries().data() + i );
+  for ( size_t i = 0; i < request->entries().size(); i += sizeof(raft::TransportEntry) ) {
+    auto& entry = *reinterpret_cast<const raft::TransportEntry*>( request->entries().data() + i );
     param.entries.push_back({ 
       .term = entry.term,
       .index = entry.index,
@@ -36,23 +41,40 @@ grpc::Status RaftService::AppendEntries(
   (void) ret;
   // @FIXME: we should be using the return value here to setup our response
 
-  ack->set_ok(1);
+  response->set_ok(1);
+  return grpc::Status::OK;
+}
+
+grpc::Status RaftService::RequestVote(
+    grpc::ServerContext *, const raftproto::RequestVoteRequest *request,
+    raftproto::RequestVoteResponse *response)
+{
+  raft::RequestVoteParams param;
+  param.term = request->term();
+  param.candidateId = request->candidate_id();
+  param.lastLogIndex = request->last_log_index();
+  param.lastLogTerm = request->last_log_term();
+
+  auto ret = ReplicaManager::Instance().RequestVote( param );
+  response->set_term( ret.term );
+  response->set_vote_granted( ret.voteGranted );
+
   return grpc::Status::OK;
 }
 
 int32_t RaftClient::Ping(int32_t cmd)
 {
-    raft::Cmd msg;
-    msg.set_sup(cmd);
-    raft::Ack reply;
+    raftproto::Cmd request;
+    request.set_sup(cmd);
+    raftproto::Ack response;
 
     grpc::ClientContext context;
 
-    auto status = stub_->TestCall(&context, msg, &reply);
+    auto status = stub_->TestCall(&context, request, &response);
     if (status.ok())
     {
         LogInfo( "Received OK" );
-        return reply.ok();
+        return response.ok();
     }
     else
     {
@@ -75,13 +97,19 @@ raft::AppendEntriesRet RaftClient::AppendEntries( raft::AppendEntriesParams args
     });
   }
   std::string toSend( reinterpret_cast<const char*>( entriesToShip.data() ), entriesToShip.size() * sizeof(raft::TransportEntry) );
-  raft::AppendEntriesArg argsToShip;
-  argsToShip.set_entries( toSend );
+  raftproto::AppendEntriesRequest request;
+  request.set_term( args.term );
+  request.set_leader_id( args.leaderId );
+  request.set_prev_log_index( args.prevLogIndex );
+  request.set_prev_log_term( args.prevLogTerm );
+  request.set_entries( toSend );
+  request.set_leader_commit( args.leaderCommit );
+
   
-  raft::Ack reply;
+  raftproto::Ack response;
   grpc::ClientContext context;
   
-  auto status = stub_->AppendEntries(&context, argsToShip, &reply);
+  auto status = stub_->AppendEntries(&context, request, &response);
   if ( status.ok() ) {
     return {};
   } else {
@@ -89,7 +117,23 @@ raft::AppendEntriesRet RaftClient::AppendEntries( raft::AppendEntriesParams args
   }
 }
 
-raft::RequestVoteRet RaftClient::RequestVote( raft::RequestVoteParams )
+raft::RequestVoteRet RaftClient::RequestVote( raft::RequestVoteParams args )
 {
-  return {};
+  raftproto::RequestVoteRequest request;
+  request.set_term( args.term );
+  request.set_candidate_id( args.candidateId );
+  request.set_last_log_index( args.lastLogIndex );
+  request.set_last_log_term( args.lastLogTerm );
+
+  raftproto::RequestVoteResponse response;
+  grpc::ClientContext context;
+  
+  auto status = stub_->RequestVote(&context, request, &response);
+
+  raft::RequestVoteRet ret = {
+    .term = response.term(),
+    .voteGranted = response.vote_granted()
+  };
+
+  return ret;
 }
