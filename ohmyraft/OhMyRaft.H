@@ -8,6 +8,7 @@
 #include <thread>
 #include <mutex>
 #include <vector>
+#include <random>
 
 #include "PromiseStore.H"
 #include "ConsensusUtils.H"
@@ -16,9 +17,15 @@
 
 namespace raft {
 
+enum raft_role {follower, candidate, leader};
 struct RaftState
 {
   int PeerId = 0;
+  //raft election state data
+  size_t votes;
+  size_t term;
+  raft_role role;
+  bool heartbeat;
 };
 
 template <class ClientT>
@@ -26,6 +33,10 @@ class RaftManager
 {
 public:
   RaftManager( int id ) { 
+    state_.term = 0;
+    state_.votes = 0;
+    state_.role = follower;
+    state_.heartbeat = true; // For now, on start up, not assuming a timeout has occured
     state_.PeerId = id;
     logs_.reserve( 10000 ); 
   }
@@ -46,6 +57,8 @@ public:
   // control points
   void start();
   void stop();
+
+  void busy();
 
   // job submission
   void submit( RaftOp op );
@@ -192,5 +205,68 @@ RequestVoteRet RaftManager<T>::RequestVote( RequestVoteParams args )
 {
   (void) args;
   return {};
+}
+
+template <class T>
+void RaftManager<T>::busy()
+{
+
+  // Used for selecting election timeouts
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_int_distribution<> timeOutGen(150, 300);
+  size_t leaderHeartBeatInterval = 100;
+
+  while (1)
+  {
+
+    if (state_.role == leader)
+    {
+      // Send heartbeat RPC
+      std::this_thread::sleep_for(std::chrono::milliseconds(leaderHeartBeatInterval));
+    }
+    else if (state_.role == follower)
+    {
+      std::this_thread::sleep_for(std::chrono::milliseconds(timeOutGen(gen)));
+
+      if (state_.heartbeat)
+      {
+        // Heartbeat was received, leader is still active
+
+        state_.heartbeat = false; // Heartbeat RPC will set this back to true
+      }
+      else
+      {
+        // No heartbeat received, begin election.
+
+        // Increment current term, switch to candidate state, vote for self.
+        state_.term++;
+        state_.role = candidate;
+        state_.votes = 1;
+
+        // Request votes from others:
+        raft::RequestVoteParams args; // TODO: Fill in parameters
+        RequestVote(args);
+      }
+    }
+    else if (state_.role == candidate)
+    {
+      // if heartbeat
+      // Someone else won the election and sent a valid heartbeat.
+      // this->state = follower
+
+      // if votes >= (N/2)+1
+      // win election, this->state = leader
+
+      // else
+      // Didn't win within election time limit, timeout for now
+      // this->state = follower
+
+      // TODO: We should detect winning the majority vote earlier
+      // than the election timeout period. The longer we wait,
+      // the more likely servers that voted for us will timeout
+      // and start another election
+    }
+  }
 }
 } // end namespace
