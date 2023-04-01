@@ -4,6 +4,9 @@
 #include "OhMyConfig.H"
 #include "OhMyRaft.H"
 #include "RaftService.H"
+#include <random>
+
+enum raft_state {follower, candidate, leader};
 
 class ReplicaManager {
 public:
@@ -32,17 +35,29 @@ public:
 
   void start();
   void stop();
+  void busy();
 
   ~ReplicaManager();
 
 private:
-  ReplicaManager() {}
+  ReplicaManager() {
+    term = 0;
+    votes = 0;
+    state = follower;
+    heartbeat = true; // For now, on start up, not assuming a timeout has occured
+  }
   raft::RaftManager<RaftClient> raft_;
   
   grpc::ServerBuilder builder_;
   RaftService raftService_;
   
   std::thread raftServer_;
+
+  //raft election state data
+  size_t votes;
+  size_t term;
+  raft_state state;
+  bool heartbeat;
 };
 
 inline void ReplicaManager::initialiseServices(
@@ -65,8 +80,8 @@ inline void ReplicaManager::initialiseServices(
   raftServer_.detach();
 
   std::vector<RaftClient> peers;
-  for ( int i = 0; i < servers.size(); ++i ) {
-    if ( i == id ) {
+  for ( unsigned int i = 0; i < servers.size(); ++i ) {
+    if ( (int)i == id ) {
       continue;
     }
     auto address = servers[i].ip + ":" + std::to_string(servers[i].port); 
@@ -99,6 +114,68 @@ inline void ReplicaManager::stop()
 inline ReplicaManager::~ReplicaManager()
 {
   stop();
+}
+
+inline void ReplicaManager::busy()
+{
+  //Used for selecting election timeouts
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_int_distribution<> timeOutGen(150,300);
+  size_t leaderHeartBeatInterval = 100;
+
+
+  while(1) { 
+
+    if(this->state == leader)
+    {
+      //Send heartbeat RPC
+      std::this_thread::sleep_for(std::chrono::milliseconds(leaderHeartBeatInterval)); 
+    }
+    else if(this->state == follower)
+    {
+      std::this_thread::sleep_for(std::chrono::milliseconds(timeOutGen(gen))); 
+
+      if(heartbeat)
+      {
+        //Heartbeat was received, leader is still active
+
+        heartbeat = false; //Heartbeat RPC will set this back to true
+
+      }
+      else
+      {
+        //No heartbeat received, begin election.
+
+        //Increment current term, switch to candidate state, vote for self.
+        this->term++;
+        this->state = candidate;
+        this->votes = 1;
+
+        //Request votes from others:
+        raft::RequestVoteParams args; //TODO: Fill in parameters
+        RequestVote(args);
+      }
+    }
+    else if(this->state == candidate)
+    {
+      //if heartbeat
+      //Someone else won the election and sent a valid heartbeat.
+      //this->state = follower
+
+      //if votes >= (N/2)+1
+      //win election, this->state = leader
+
+      //else
+      //Didn't win within election time limit, timeout for now
+      //this->state = follower
+
+      //TODO: We should detect winning the majority vote earlier
+      //than the election timeout period. The longer we wait,
+      //the more likely servers that voted for us will timeout
+      //and start another election
+    }
+    }
 }
 
 inline std::optional<int> ReplicaManager::get( int key )
