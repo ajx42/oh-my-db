@@ -14,7 +14,7 @@ public:
     explicit RaftService() {}
 
     grpc::Status TestCall(grpc::ServerContext *, const raftproto::Cmd *, raftproto::Ack *);
-    grpc::Status AppendEntries(grpc::ServerContext*, const raftproto::AppendEntriesRequest*, raftproto::Ack*);
+    grpc::Status AppendEntries(grpc::ServerContext*, const raftproto::AppendEntriesRequest*, raftproto::AppendEntriesResponse*);
     grpc::Status RequestVote(grpc::ServerContext*, const raftproto::RequestVoteRequest*, raftproto::RequestVoteResponse*);
 };
 

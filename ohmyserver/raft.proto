@@ -4,7 +4,7 @@ package raftproto;
 
 service Raft {
   rpc TestCall(Cmd) returns(Ack) {}
-  rpc AppendEntries(AppendEntriesRequest) returns(Ack) {}
+  rpc AppendEntries(AppendEntriesRequest) returns(AppendEntriesResponse) {}
   rpc RequestVote(RequestVoteRequest) returns(RequestVoteResponse) {}
 }
 
@@ -23,6 +23,11 @@ message AppendEntriesRequest {
   int32 prev_log_term = 4;
   bytes entries = 5;
   int32 leader_commit = 6;
+}
+
+message AppendEntriesResponse {
+  int32 term = 1;
+  int32 success = 2;
 }
 
 message RequestVoteRequest {

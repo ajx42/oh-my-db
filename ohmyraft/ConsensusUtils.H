@@ -70,9 +70,9 @@ struct Operation {
     promiseHandle.reset();
   }
 
-  std::string str() {
+  std::string str() const {
     std::stringstream oss;
-    oss << "Op[ ";
+    oss << "Operation[ ";
     if ( kind == GET ) {
       oss << "GET(" << std::get<getarg_t>( args ) << ") ";
     } else {
@@ -116,6 +116,8 @@ struct AppendEntriesParams {
     int32_t term;
     int32_t index;
     RaftOp op;
+
+    std::string str() const;
   };
   int32_t term;
   int32_t leaderId;
@@ -123,12 +125,52 @@ struct AppendEntriesParams {
   int32_t prevLogTerm;
   std::vector<AppendLogEntry> entries;
   int32_t leaderCommit;
+
+  std::string str() const;
 };
 
+inline std::string AppendEntriesParams::str() const
+{
+  std::stringstream ss;
+  ss  << "AppendEntriesParam={"
+      << "Term="          << term         << " "
+      << "LeaderId="      << leaderId     << " "
+      << "PrevLogIndex="  << prevLogIndex << " "
+      << "PrevLogTerm="   << prevLogTerm  << " "
+      << "LeaderCommit="  << leaderCommit << " "
+      << "Entries=[ ";
+  for ( auto e: entries ) {
+    ss << e.str() << " ";
+  }
+  ss  << "]}";
+  return ss.str();
+}
+
+inline std::string AppendEntriesParams::AppendLogEntry::str() const
+{
+  std::stringstream ss;
+  ss  << "AppendLogEntry={"
+      << "Term=" << term << " "
+      << "Index=" << index << " "
+      << "Op=" << op.str() << "}";
+  return ss.str();
+}
+
 struct AppendEntriesRet {
-  bool ok = false;
-  // @TODO
+  int32_t term;
+  bool success;
+
+  std::string str() const;
 };
+
+inline std::string AppendEntriesRet::str() const
+{
+  std::stringstream ss;
+  ss  << "AppendEntriesRet=["
+      << "Term=" << term << " "
+      << "Success=" << success << "]";
+  return ss.str();
+}
 
 struct RequestVoteParams {
   int candidateId;
@@ -136,27 +178,32 @@ struct RequestVoteParams {
   int lastLogIndex;
   int lastLogTerm;
 
-  std::string str() {
-    std::stringstream ss;
-    ss  << "RequestVoteParams=["
-        << "CandidateId=" << candidateId << " "
-        << "Term=" << term << " "
-        << "LastLogIndex=" << lastLogIndex << " "
-        << "LastLogTerm=" << lastLogTerm << "]";
-    return ss.str();
-  }
+  std::string str();
 };
+
+inline std::string RequestVoteParams::str() {
+  std::stringstream ss;
+  ss  << "RequestVoteParams=["
+      << "CandidateId=" << candidateId << " "
+      << "Term=" << term << " "
+      << "LastLogIndex=" << lastLogIndex << " "
+      << "LastLogTerm=" << lastLogTerm << "]";
+  return ss.str();
+}
 
 struct RequestVoteRet {
   int term;
   bool voteGranted;
-  std::string str() {
-    std::stringstream ss;
-    ss  << "RequestVoteRet=["
-        << "Term=" << term << " "
-        << "VoteGranted=" << voteGranted << "]";
-    return ss.str();
-  }
+  
+  std::string str();  
 };
+
+inline std::string RequestVoteRet::str() {
+  std::stringstream ss;
+  ss  << "RequestVoteRet=["
+      << "Term=" << term << " "
+      << "VoteGranted=" << voteGranted << "]";
+  return ss.str();
+}
 
 } // end namespace 

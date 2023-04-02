@@ -10,7 +10,7 @@ grpc::Status RaftService::TestCall(
 }
 
 grpc::Status RaftService::AppendEntries(
-    grpc::ServerContext*, const raftproto::AppendEntriesRequest* request, raftproto::Ack* response )
+    grpc::ServerContext*, const raftproto::AppendEntriesRequest* request, raftproto::AppendEntriesResponse* response )
 {
   // The idea is to decode the received args and repackage them to match exact
   // raft specification. So that our Raft impl  doesn't need to handle decoding.
@@ -38,10 +38,10 @@ grpc::Status RaftService::AppendEntries(
   
   // hook to pass AppendEntries to ReplicaManager
   auto ret = ReplicaManager::Instance().AppendEntries( param );
-  (void) ret;
-  // @FIXME: we should be using the return value here to setup our response
+  
+  response->set_term( ret.term );
+  response->set_success( ret.success );
 
-  response->set_ok(1);
   return grpc::Status::OK;
 }
 
@@ -107,13 +107,16 @@ RaftClient::AppendEntries( raft::AppendEntriesParams args )
   request.set_leader_commit( args.leaderCommit );
 
   
-  raftproto::Ack response;
+  raftproto::AppendEntriesResponse response;
   grpc::ClientContext context;
   
   auto status = stub_->AppendEntries(&context, request, &response);
   
   if ( status.ok() ) {
-    return {};
+    return raft::AppendEntriesRet{
+      .term = response.term(),
+      .success = static_cast<bool>( response.success() ) 
+    };
   } else {
     return {};
   }

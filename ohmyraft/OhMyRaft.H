@@ -157,11 +157,91 @@ bool RaftManager<T>::submit( RaftOp op )
 template <class T>
 void RaftManager<T>::runLeaderOneIter()
 {
-  // currently just heartbeating
-  AppendEntriesParams args {};
-  for ( auto& [id, _] : peers_ ) {
-    auto th = std::thread([id = id, this, args](){
-      peers_[id]->AppendEntries( args );
+  state_.Mut.lock();
+  auto savedCurrentTerm = state_.CurrentTerm;
+  for ( auto op: raftIn_ ) {
+    state_.Logs.push_back( {
+      .term = state_.CurrentTerm,
+      .op = op
+    });
+  }
+  state_.Mut.unlock();
+
+  for ( auto& [id, peer] : peers_ ) {
+    auto th = std::thread([id = id, this, savedCurrentTerm]{
+      AppendEntriesParams args;
+
+      state_.Mut.lock();
+      auto nextIndex = state_.NextIndex[id];
+      auto prevLogIndex = nextIndex - 1;
+      auto prevLogTerm = -1;
+      if ( prevLogIndex >= 0 ) {
+        prevLogTerm = state_.Logs[prevLogIndex].term;
+      }
+      for ( size_t i = nextIndex; i < state_.Logs.size(); ++i ) {
+        args.entries.push_back({
+          .term = state_.Logs[i].term,
+          .index = static_cast<int32_t>(i),
+          .op = state_.Logs[i].op.withoutPromise()
+        });
+      }
+
+      args.term = savedCurrentTerm;
+      args.leaderId = id_;
+      args.prevLogIndex = prevLogIndex;
+      args.prevLogTerm = prevLogTerm;
+      args.leaderCommit = state_.CommitIndex;
+      if ( args.entries.size() ) {
+        LogInfo("Sending: " + args.str() );  
+      }
+      state_.Mut.unlock();
+
+      auto replyOpt = peers_[id]->AppendEntries( args );
+      if ( ! replyOpt.has_value() ) {
+        return;
+      }
+      
+      auto reply = replyOpt.value();
+      std::lock_guard<std::mutex> lock( state_.Mut );
+      if ( reply.term > savedCurrentTerm ) {
+        becomeFollower( reply.term );
+        return;
+      }
+
+      if ( state_.Role == RaftRole::Leader && savedCurrentTerm == reply.term ) {
+        if ( reply.success ) {
+          state_.NextIndex[id] = nextIndex + args.entries.size();
+          state_.MatchIndex[id] = state_.NextIndex[id] - 1;
+          
+          auto savedCommitIndex = state_.CommitIndex;
+          for ( size_t i = state_.CommitIndex + 1; i < state_.Logs.size(); ++i ) {
+            if ( state_.Logs[i].term == state_.CurrentTerm ) {
+              auto matchCount = 1;
+              for ( auto& [pid, _] : peers_ ) {
+                if ( state_.MatchIndex[pid] >= i ) {
+                  matchCount++;
+                }
+              }
+              if ( matchCount * 2 > peers_.size() ) {
+                state_.CommitIndex = i;
+              }
+            }
+          }
+          if ( state_.CommitIndex != savedCommitIndex ) {
+            LogInfo("New entries being committed" );
+            std::lock_guard<std::mutex> rom( raftOutMutex_ );
+            for ( size_t i = state_.LastApplied + 1; i <= state_.CommitIndex; ++i ) {
+              raftOut_.push_back( state_.Logs[i].op );
+            }
+            state_.LastApplied = state_.CommitIndex;
+            moreExecJobsReady_.signal();
+          }
+
+        } else {
+          state_.NextIndex[id] = nextIndex - 1;
+          LogInfo("Unsuccessful Reply: " + reply.str());
+        }
+      }
     });
     th.detach();
   }
@@ -183,19 +263,6 @@ void RaftManager<T>::raftImpl()
     if ( role == RaftRole::Leader ) {
       // sending heartbeats
       runLeaderOneIter();
-    }
-
-    // @FIXME: temporarily just forwarded received ops to the executer.
-    // Ideally only the committed entries will be sent.
-    raftOutMutex_.lock();
-    for ( auto op: raftIn_ ) {
-      raftOut_.push_back( op );
-    }
-    if ( ! raftOut_.empty() ) {
-      raftOutMutex_.unlock();
-      moreExecJobsReady_.signal(); 
-    } else {
-      raftOutMutex_.unlock();
     }
 
     // sleep for a while
@@ -258,27 +325,82 @@ RaftManager<T>::~RaftManager()
 template <class T>
 AppendEntriesRet RaftManager<T>::AppendEntries( AppendEntriesParams args )
 {
-  // check if heartbeat
-  if ( args.entries.empty() ) {
-    state_.ElectionResetEvent = std::chrono::system_clock::now();
+  std::lock_guard<std::mutex> lock(state_.Mut);
+  state_.ElectionResetEvent = std::chrono::system_clock::now();
+  
+  if ( state_.Role == RaftRole::Dead ) {
     return {};
   }
 
-  for ( auto e: args.entries ) {
-    std::cout << e.op.str() << std::endl;
-    submit( e.op );
+  if ( args.term > state_.CurrentTerm ) {
+    LogInfo("CurrentTerm out of date");
+    becomeFollower( args.term );
   }
-  return {};
+  
+  AppendEntriesRet reply;
+  reply.success = false;
+
+  if ( args.term == state_.CurrentTerm ) {
+    if ( state_.Role != RaftRole::Follower ) {
+      becomeFollower( args.term );
+    }
+    if ( args.prevLogIndex == -1 ||
+         ( args.prevLogIndex < state_.Logs.size() && args.prevLogIndex == state_.Logs[args.prevLogIndex].term) )
+    {
+      reply.success = true;
+      auto logInsertIndex = args.prevLogIndex + 1;
+      auto newEntriesIndex = 0;
+
+      while ( true ) {
+        if ( logInsertIndex >= state_.Logs.size() || newEntriesIndex >= args.entries.size() ) {
+          break;
+        }
+        if ( state_.Logs[logInsertIndex].term != args.entries[newEntriesIndex].term ) {
+          break;
+        }
+        logInsertIndex++;
+        newEntriesIndex++;
+      }
+
+      if ( newEntriesIndex < args.entries.size() ) {
+        for ( size_t i = logInsertIndex; i < state_.Logs.size(); ++i ) {
+          state_.Logs[i].op.abort(); // release any pending service requests
+        }
+        state_.Logs.resize( logInsertIndex );
+        for ( size_t i = newEntriesIndex; i < args.entries.size(); ++i ) {
+          state_.Logs.push_back({
+            .term = args.entries[i].term,
+            .op = args.entries[i].op
+          });
+          if ( (int32_t)state_.Logs.size() - 1 != args.entries[i].index ) {
+            LogError("mismatch of index");
+          }
+        }
+      }
+
+      if ( args.leaderCommit > state_.CommitIndex ) {
+        state_.CommitIndex = std::min( args.leaderCommit, (int32_t) state_.Logs.size() - 1 );
+        std::lock_guard<std::mutex> rom(raftOutMutex_);
+        for ( size_t i = state_.LastApplied + 1; i <= state_.CommitIndex; ++i ) {
+          raftOut_.push_back( state_.Logs[i].op );
+        }
+        state_.LastApplied = state_.CommitIndex;
+        moreExecJobsReady_.signal();
+      }
+    }
+  }
+
+  reply.term = state_.CurrentTerm;
+  if ( ! args.entries.empty() ) {
+    LogInfo("Replying: " + reply.str());
+  }
+  return reply;
 }
 
 template <class T>
 RequestVoteRet RaftManager<T>::RequestVote( RequestVoteParams args )
 {
-  LogInfo("RequestVote from " + std::to_string(args.candidateId));
-  LogInfo("term: " + std::to_string(args.term) + 
-          " lastLogTerm: " + std::to_string(args.lastLogTerm) + 
-          " lastLogIndex: " + std::to_string(args.lastLogIndex))
-  
+  LogInfo("Received " + args.str()); 
   std::lock_guard<std::mutex> lock(state_.Mut);
   RequestVoteRet ret;
   
