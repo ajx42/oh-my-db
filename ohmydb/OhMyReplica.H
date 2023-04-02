@@ -32,7 +32,6 @@ public:
 
   void start();
   void stop();
-  void busy();
 
   ~ReplicaManager();
 
@@ -66,26 +65,24 @@ inline void ReplicaManager::initialiseServices(
   });
   raftServer_.detach();
 
-  std::vector<RaftClient> peers;
-  for ( unsigned int i = 0; i < servers.size(); ++i ) {
+  std::map<int32_t, std::unique_ptr<RaftClient>> peers;
+  for ( size_t i = 0; i < servers.size(); ++i ) {
     if ( (int)i == id ) {
       continue;
     }
     auto address = servers[i].ip + ":" + std::to_string(servers[i].port); 
-    peers.push_back( RaftClient(grpc::CreateChannel(
-        address, grpc::InsecureChannelCredentials())));
+    peers[i] = std::make_unique<RaftClient>(grpc::CreateChannel(
+        address, grpc::InsecureChannelCredentials()));
     
     if ( waitForPeers ) {
-      while ( peers.back().Ping(1) < 0 ) {
+      while ( peers[i]->Ping(1) < 0 ) {
         sleep(1);
       }
       LogInfo( "ping OK: " + std::to_string(i) );
     }
   }
-  raft_.attachPeers( std::move(peers) );
-  raft_.setId( id ); 
+  raft_.initialiseConnections( id, std::move(peers) );
   LogInfo( "Services Started: Raft Initialised" );
-
 }
 
 inline void ReplicaManager::start()
@@ -103,11 +100,6 @@ inline ReplicaManager::~ReplicaManager()
   stop();
 }
 
-inline void ReplicaManager::busy()
-{
-  raft_.busy();
-}
-
 inline std::optional<int> ReplicaManager::get( int key )
 {
   std::promise<raft::RaftOp::res_t> pr;
@@ -120,8 +112,12 @@ inline std::optional<int> ReplicaManager::get( int key )
     .promiseHandle = { it }
   };
 
-  raft_.submit( op );
-
+  auto isSubmitted = raft_.submit( op );
+  if ( ! isSubmitted ) {
+    raft::PromiseStore<raft::RaftOp::res_t>::Instance()
+     .getAndRemove( it );
+    return {}; 
+  }
   return std::get<std::optional<int>>( ft.get() );
 }
 
@@ -138,8 +134,12 @@ inline bool ReplicaManager::put( std::pair<int, int> kvp )
     .promiseHandle = { it }
   };
 
-  raft_.submit( op );
-
+  bool isSubmitted = raft_.submit( op );
+  if ( ! isSubmitted ) {
+    raft::PromiseStore<raft::RaftOp::res_t>::Instance()
+      .getAndRemove( it );
+    return false;
+  }
   return std::get<bool>( ft.get() );
 }
 

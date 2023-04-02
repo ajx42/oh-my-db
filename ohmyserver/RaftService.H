@@ -24,8 +24,8 @@ public:
     RaftClient(std::shared_ptr<grpc::Channel> channel)
         : stub_(raftproto::Raft::NewStub(channel)) {}
     int32_t Ping(int32_t cmd);
-    raft::AppendEntriesRet AppendEntries( raft::AppendEntriesParams );
-    raft::RequestVoteRet RequestVote( raft::RequestVoteParams );
+    std::optional<raft::AppendEntriesRet> AppendEntries( raft::AppendEntriesParams );
+    std::optional<raft::RequestVoteRet> RequestVote( raft::RequestVoteParams );
 private:
     std::unique_ptr<raftproto::Raft::Stub> stub_;
 };

@@ -135,11 +135,28 @@ struct RequestVoteParams {
   int term;
   int lastLogIndex;
   int lastLogTerm;
+
+  std::string str() {
+    std::stringstream ss;
+    ss  << "RequestVoteParams=["
+        << "CandidateId=" << candidateId << " "
+        << "Term=" << term << " "
+        << "LastLogIndex=" << lastLogIndex << " "
+        << "LastLogTerm=" << lastLogTerm << "]";
+    return ss.str();
+  }
 };
 
 struct RequestVoteRet {
   int term;
   bool voteGranted;
+  std::string str() {
+    std::stringstream ss;
+    ss  << "RequestVoteRet=["
+        << "Term=" << term << " "
+        << "VoteGranted=" << voteGranted << "]";
+    return ss.str();
+  }
 };
 
 } // end namespace 

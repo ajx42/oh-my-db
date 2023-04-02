@@ -83,7 +83,8 @@ int32_t RaftClient::Ping(int32_t cmd)
 }
 
 
-raft::AppendEntriesRet RaftClient::AppendEntries( raft::AppendEntriesParams args )
+std::optional<raft::AppendEntriesRet> 
+RaftClient::AppendEntries( raft::AppendEntriesParams args )
 {
   std::vector<raft::TransportEntry> entriesToShip;
   for ( auto entry: args.entries ) {
@@ -110,6 +111,7 @@ raft::AppendEntriesRet RaftClient::AppendEntries( raft::AppendEntriesParams args
   grpc::ClientContext context;
   
   auto status = stub_->AppendEntries(&context, request, &response);
+  
   if ( status.ok() ) {
     return {};
   } else {
@@ -117,7 +119,8 @@ raft::AppendEntriesRet RaftClient::AppendEntries( raft::AppendEntriesParams args
   }
 }
 
-raft::RequestVoteRet RaftClient::RequestVote( raft::RequestVoteParams args )
+std::optional<raft::RequestVoteRet> 
+RaftClient::RequestVote( raft::RequestVoteParams args )
 {
   raftproto::RequestVoteRequest request;
   request.set_term( args.term );
@@ -130,10 +133,13 @@ raft::RequestVoteRet RaftClient::RequestVote( raft::RequestVoteParams args )
   
   auto status = stub_->RequestVote(&context, request, &response);
 
+  if ( !status.ok() ) {
+    return {};
+  }
+
   raft::RequestVoteRet ret = {
     .term = response.term(),
-    .voteGranted = response.vote_granted()
+    .voteGranted = static_cast<bool>( response.vote_granted() )
   };
-
-  return ret;
+  return {ret};
 }

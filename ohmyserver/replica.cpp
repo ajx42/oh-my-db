@@ -89,13 +89,13 @@ int main(int argc, char **argv)
   ReplicaManager::Instance().initialiseServices( servers, id, true );  
   ReplicaManager::Instance().start();
 
+  std::this_thread::sleep_for(std::chrono::seconds(5));
+
   // -- @FIXME: remove once done, for test only
-  if ( id == 0 ) {    
     ReplicaManager::Instance().put( std::make_pair(1, 2) );
     LogInfo( "Received Output: " + std::to_string( ReplicaManager::Instance().get(1).value_or(-1) ) );
-  }
   // -- 
 
   //Busy loop, handles election timeouts
-  ReplicaManager::Instance().busy();
+  while( 1 ) { std::this_thread::sleep_for(std::chrono::seconds(10)); }
 }

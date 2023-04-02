@@ -10,6 +10,7 @@
 #include <vector>
 #include <random>
 
+#include "TimeTravelSignal.H"
 #include "PromiseStore.H"
 #include "ConsensusUtils.H"
 #include "TestUtils.H"
@@ -17,54 +18,63 @@
 
 namespace raft {
 
-enum raft_role {follower, candidate, leader};
+enum class RaftRole : int32_t {
+  Follower = 0,
+  Candidate = 1, 
+  Leader = 2,
+  Dead = 3
+};
+
 struct RaftState
 {
-  int PeerId = 0;
-  std::chrono::time_point<std::chrono::system_clock> electionResetEvent;
-  std::chrono::milliseconds electionTimeout;
-  //raft election state data
-  int votedFor;
-  int term;
-  raft_role role;
-  std::vector<int> nextIndex;
-  std::vector<int> matchIndex;
+  // just going to protect all state using a single mutex
+  // some performance hit, but kool for now
+  std::mutex Mut;
+  
+  // (needs to be) persistent state
+  int32_t CurrentTerm;
+  int32_t VotedFor;
+  std::vector<LogEntry> Logs;
+
+  // volatile state
+  RaftRole Role;
+  std::chrono::time_point<std::chrono::system_clock> ElectionResetEvent;
+  int32_t CommitIndex; // 
+  int32_t LastApplied; // I am not sure why this is not persistent
+  
+  // for leaders only peer id -> next/match index
+  std::map<int32_t, int32_t> NextIndex;
+  std::map<int32_t, int32_t> MatchIndex;
+
+  // for candidate only, non standard
+  int32_t VotesReceived;
+
 };
 
 template <class ClientT>
 class RaftManager
 {
 public:
-  RaftManager( int id ) { 
-    state_.PeerId = id;
-    state_.term = 0;
-    state_.votedFor = -1;
-    logs_.reserve( 10000 ); 
+  RaftManager() { 
+    state_.CurrentTerm = 0;
+    state_.VotedFor = -1;
+    state_.Logs.reserve( 10000 );
+    state_.Role = RaftRole::Follower;
+    state_.CommitIndex = -1;
+    state_.LastApplied = -1;
+    state_.VotesReceived = 0;
   }
 
-  RaftManager() {}
   ~RaftManager();
 
-  void attachPeers( std::vector<ClientT>&& peers ) {
-    peers_ = std::move(peers);
-    LogInfo("attaching peers");
-    state_.nextIndex = std::vector<int>(peers_.size(), 0);
-    state_.matchIndex = std::vector<int>(peers_.size(), -1);
-  }
-
-  // configuration
-  void setId( int id ) {
-    state_.PeerId = id;
-  }
+  void initialiseConnections( int32_t myId, std::map<int32_t, std::unique_ptr<ClientT>>&& peers );
 
   // control points
   void start();
   void stop();
 
-  void busy();
-
   // job submission
-  void submit( RaftOp op );
+  bool submit( RaftOp op );
 
   // raft rpc implementations
   AppendEntriesRet AppendEntries( AppendEntriesParams );
@@ -75,80 +85,122 @@ private:
   // these must be run on separate threads
   void raftImpl();
   void executerImpl();
+  void electionImpl();
 
-  std::vector<ClientT> peers_;
-  std::vector<LogEntry> logs_;
+  // threads to manage various concurrent activities
+  std::thread raftThread; // leader stuff
+  std::thread executerThread; // execute committed entries
+  std::thread electionThread; // check if leader exists or call for election
 
+  // single switch to break out of all threads (gracefully)
+  bool keepRunning_ = false;
+
+  // peer id -> rpc client 
+  std::map<int32_t, std::unique_ptr<ClientT>> peers_;
+
+  // these lists and mutexes help with I/O to various threads
+  // ideally one would use channels, but going with this easy solution for now
   std::list<RaftOp> dispatchOut_, raftIn_, raftOut_, execIn_;
-
   std::mutex raftOutMutex_;
   std::mutex raftInMutex_;
   std::mutex raftStateMutex_;
 
-  std::thread raft;
-  std::thread exec;
+  TimeTravelSignal moreInputsReady_;
+  TimeTravelSignal moreExecJobsReady_;
 
-  bool hasStarted = false;
-  bool keepRunning_ = false;
-
+  // all the state that is required by the algorithm is stored here
+  // this state must be locked before use
   RaftState state_;
-  
-  void BecomeLeader();
-  void BecomeFollower(int);
-  void BecomeCandidate(int);
 
-  std::chrono::milliseconds GetElectionTimeout();
-  void StartElection();
+  int32_t id_; // id of this replica
+
+  // helper functions
+  void becomeLeader();
+  void becomeFollower(int32_t term);
+  void becomeCandidate(int32_t term);
+  void runLeaderOneIter();
+
+
+  int32_t getRandomElectionTimeout();
+  void startElection();
 };
 
+// no need for locking state, this is to be called before start is called
 template <class T>
-void RaftManager<T>::submit( RaftOp op )
+void RaftManager<T>::initialiseConnections(
+    int32_t myId, std::map<int32_t, std::unique_ptr<T>>&& peers )
 {
+  id_ = myId;
+  peers_ = std::move(peers);
+  for ( auto& [id, _]: peers_ ) {
+    state_.NextIndex[id] = 0;
+    state_.MatchIndex[id] = -1;
+  }
+}
+
+template <class T>
+bool RaftManager<T>::submit( RaftOp op )
+{
+  std::unique_lock stateLock { state_.Mut };
+  if ( state_.Role != RaftRole::Leader ) {
+    LogError("This Replica is not the leader. Job can't be submitted.");
+    return false;
+  }
+  stateLock.unlock();
+
   std::lock_guard<std::mutex> lock( raftInMutex_ );
   dispatchOut_.push_back( op );
+  moreInputsReady_.signal();
+  return true;
+}
+
+template <class T>
+void RaftManager<T>::runLeaderOneIter()
+{
+  // currently just heartbeating
+  AppendEntriesParams args {};
+  for ( auto& [id, _] : peers_ ) {
+    auto th = std::thread([id = id, this, args](){
+      peers_[id]->AppendEntries( args );
+    });
+    th.detach();
+  }
 }
 
 template <class T>
 void RaftManager<T>::raftImpl()
 {
   while ( keepRunning_ ) {
+    //moreInputsReady_.wait();
     raftInMutex_.lock();
     std::swap( dispatchOut_, raftIn_ ); 
     raftInMutex_.unlock();
 
     // @FIXME: All this logic is a placeholder till we actually build out RAFT.
- 
-    // append received entries to logs
-    for ( const auto& op : raftIn_ ) {
-      logs_.push_back( LogEntry {
-        .term = 0,
-        .op = op,
-      });
+    state_.Mut.lock();
+    auto role = state_.Role;
+    state_.Mut.unlock();
+    if ( role == RaftRole::Leader ) {
+      // sending heartbeats
+      runLeaderOneIter();
     }
 
-    AppendEntriesParams args;
-    
-    int cnt = 0;
-    for ( const auto& op : raftIn_ ) {
-      args.entries.push_back( AppendEntriesParams::AppendLogEntry {
-        .term = 0,
-        .index = cnt++,
-        .op = op.withoutPromise(),
-      });
-    }
-  
-    if ( state_.PeerId  == 0 && ! args.entries.empty() ) {
-      for ( auto& peer: peers_ ) {
-        peer.AppendEntries( args ); 
-      }
-    }
-  
+    // @FIXME: temporarily just forwarded received ops to the executer.
+    // Ideally only the committed entries will be sent.
     raftOutMutex_.lock();
     for ( auto op: raftIn_ ) {
-      raftOut_.push_back(op);
+      raftOut_.push_back( op );
     }
-    raftOutMutex_.unlock();
-    
+    if ( ! raftOut_.empty() ) {
+      raftOutMutex_.unlock();
+      moreExecJobsReady_.signal(); 
+    } else {
+      raftOutMutex_.unlock();
+    }
+
+    // sleep for a while
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+   
     // prepare to receive more
     raftIn_.clear();
   }
@@ -158,6 +210,7 @@ template <class T>
 void RaftManager<T>::executerImpl()
 {
   while ( keepRunning_ ) {
+    moreExecJobsReady_.wait();
     raftOutMutex_.lock();
     std::swap( execIn_, raftOut_ );
     raftOutMutex_.unlock();
@@ -173,8 +226,9 @@ template <class T>
 void RaftManager<T>::start()
 {
   keepRunning_ = true;
-  exec = std::thread([this]{executerImpl();});
-  raft = std::thread([this]{raftImpl();});
+  electionThread = std::thread([this]{electionImpl();});
+  executerThread = std::thread([this]{executerImpl();});
+  raftThread = std::thread([this]{raftImpl();});
 }
 
 template <class T>
@@ -184,8 +238,9 @@ void RaftManager<T>::stop()
     return;
   }
   keepRunning_ = false;
-  raft.join();
-  exec.join();
+  electionThread.join();
+  raftThread.join();
+  executerThread.join();
 }
 
 template <class T>
@@ -205,7 +260,7 @@ AppendEntriesRet RaftManager<T>::AppendEntries( AppendEntriesParams args )
 {
   // check if heartbeat
   if ( args.entries.empty() ) {
-    state_.electionResetEvent = std::chrono::system_clock::now();
+    state_.ElectionResetEvent = std::chrono::system_clock::now();
     return {};
   }
 
@@ -224,177 +279,182 @@ RequestVoteRet RaftManager<T>::RequestVote( RequestVoteParams args )
           " lastLogTerm: " + std::to_string(args.lastLogTerm) + 
           " lastLogIndex: " + std::to_string(args.lastLogIndex))
   
+  std::lock_guard<std::mutex> lock(state_.Mut);
   RequestVoteRet ret;
-
-  int lastLogIndex = logs_.size() - 1;
+  
+  int lastLogIndex = state_.Logs.size() - 1;
   int lastLogTerm = -1;
   if ( lastLogIndex >= 0 ) {
-    lastLogTerm = logs_[lastLogIndex].term;
+    lastLogTerm = state_.Logs[lastLogIndex].term;
   }
 
-  if ( args.term > state_.term ) {
+  if ( args.term > state_.CurrentTerm ) {
     // become follower
-    state_.term = args.term;
-    state_.role = follower;
-    state_.votedFor = -1;
+    becomeFollower( args.term );
   }
 
-  if ( args.term == state_.term && ( state_.votedFor == -1 || state_.votedFor == args.candidateId ) &&
-       ( args.lastLogTerm >= lastLogTerm || 
+  if ( args.term == state_.CurrentTerm && ( state_.VotedFor == -1 || state_.VotedFor == args.candidateId ) &&
+       ( args.lastLogTerm > lastLogTerm || 
          ( args.lastLogTerm == lastLogTerm && args.lastLogIndex >= lastLogIndex ))) {
     // vote for candidate
     ret.voteGranted = true;
-    state_.votedFor = args.candidateId;
-    state_.electionResetEvent = std::chrono::system_clock::now();
+    state_.VotedFor = args.candidateId;
+    state_.ElectionResetEvent = std::chrono::system_clock::now();
   } else {
     ret.voteGranted = false;
   }
 
-  ret.term = state_.term;
+  ret.term = state_.CurrentTerm;
   LogInfo("Replying to RequestVote from " + std::to_string(args.candidateId));
-  LogInfo("term: " + std::to_string(ret.term) + 
-          " voteGranted: " + std::to_string(ret.voteGranted))
-
+  LogInfo("Ret: " + ret.str());
   return ret;
 }
 
+// these are helpers, state should be locked before calling
 template <class T>
-void RaftManager<T>::BecomeFollower( int term )
+void RaftManager<T>::becomeFollower( int term )
 {
-  state_.term = term;
-  state_.role = follower;
-  state_.votedFor = -1;
+  LogInfo("Becoming Follower");
+  state_.CurrentTerm = term;
+  state_.Role = RaftRole::Follower;
+  state_.VotedFor = -1;
+  state_.ElectionResetEvent = std::chrono::system_clock::now();
 }
 
 template <class T>
-void RaftManager<T>::BecomeCandidate(int term)
+void RaftManager<T>::becomeCandidate(int term)
 {
-  state_.term = term;
-  state_.role = candidate;
-  state_.electionResetEvent = std::chrono::system_clock::now();
-  state_.electionTimeout = GetElectionTimeout();
-  state_.votedFor = state_.PeerId;
+  LogInfo("Becoming Candidate");
+  state_.CurrentTerm = term;
+  state_.Role = RaftRole::Candidate;
+  state_.ElectionResetEvent = std::chrono::system_clock::now();
+  state_.VotedFor = id_;
 }
 
 template <class T>
-void RaftManager<T>::BecomeLeader()
+void RaftManager<T>::becomeLeader()
 {
-  state_.role = leader;
-  state_.electionResetEvent = std::chrono::system_clock::now();
-  state_.electionTimeout = GetElectionTimeout();
-  state_.votedFor = -1;
-  // @TODO: nextIndex, matchIndex
-  state_.nextIndex = std::vector<int>(peers_.size(), logs_.size());
-  state_.matchIndex = std::vector<int>(peers_.size(), -1);
+  LogInfo("Becoming Leader");
+  state_.Role = RaftRole::Leader;
+  state_.ElectionResetEvent = std::chrono::system_clock::now();
+  state_.VotedFor = -1;
+  state_.NextIndex.clear();
+  state_.MatchIndex.clear();
+  // initialise leader state
+  for ( auto& [id, _]: peers_ ) {
+    state_.NextIndex[id] = state_.Logs.size();
+    state_.MatchIndex[id] = -1;
+  }
 }
+// -- end of role transition helpers
 
 template <class T>
-std::chrono::milliseconds RaftManager<T>::GetElectionTimeout()
+int32_t RaftManager<T>::getRandomElectionTimeout()
 {
   std::random_device rd;
   std::mt19937 gen(rd());
-  std::uniform_int_distribution<> timeOutGen(150, 300);
-  std::chrono::milliseconds timeOut = std::chrono::milliseconds{timeOutGen(gen)};
-  return timeOut;
+  std::uniform_int_distribution<> timeOutGen(3500, 5000);
+  return timeOutGen( gen );
 }
 
 template <class T>
-void RaftManager<T>::StartElection()
+void RaftManager<T>::startElection()
 {
-  // become candidate
-  BecomeCandidate(state_.term + 1);
+  // state is already locked at this point
+  becomeCandidate(state_.CurrentTerm + 1);
 
-  LogInfo("Starting election for term: " + std::to_string(state_.term));
-  LogInfo("Voted for: " + std::to_string(state_.votedFor));
+  LogInfo("Starting election for term: " + std::to_string(state_.CurrentTerm));
+  LogInfo("Voted for: " + std::to_string(state_.VotedFor));
 
-  int startTerm = state_.term;
-  int lastLogIndex = logs_.size() - 1;
-  int lastLogTerm = -1;
-  if ( lastLogIndex >= 0 ) {
-    lastLogTerm = logs_[lastLogIndex].term;
-  }
+  int savedCurrentTerm = state_.CurrentTerm;
 
   // Send RequestVote RPCs to all peers and count votes
-  int votesReceived = 1; // vote for self
-  raft::RequestVoteParams args = {
-    .candidateId = state_.PeerId,
-    .term = state_.term,
-    .lastLogIndex = lastLogIndex,
-    .lastLogTerm = lastLogTerm
-  };
-  for ( auto& peer: peers_ ) {
-    raft::RequestVoteRet response = peer.RequestVote( args );
+  state_.VotesReceived = 1; // vote for self
+  
+  for ( auto& [id, _] : peers_ ) {
+    auto th = std::thread([id = id, savedCurrentTerm, this]{
+      // this means we will wait here till the launching method
+      // is done
+      state_.Mut.lock();
+      auto sendLastLogIndex = static_cast<int32_t>( state_.Logs.size() ) - 1;
+      auto sendLastLogTerm = ! state_.Logs.empty() ? state_.Logs.back().term : -1;
+      state_.Mut.unlock();
 
-    // check timeout
-    if ( std::chrono::system_clock::now() - state_.electionResetEvent > state_.electionTimeout ) {
-      return; // election timed out, will start a new one in the next iteration of busy()
-    }
+      raft::RequestVoteParams args = {
+        .candidateId = id_,
+        .term = savedCurrentTerm, // we are using the term with which we started
+                                  // the election, so that if there is a new leader
+                                  // our requests will get turned down
+                                  // it will be a mess if half of our requests are for
+                                  // one term and the remaining for another
+        .lastLogIndex = sendLastLogIndex,
+        .lastLogTerm = sendLastLogTerm
+      };
+      LogInfo("Sending RequestVote to PeerId=" + std::to_string( id ) + " " + args.str());
+      auto replyOpt = peers_[id]->RequestVote( args );
+      if ( ! replyOpt.has_value() ) {
+        return; // rpc failed, we can't do anything, we shouldn't retry for now
+      }
 
-    // check if we are no longer candidate (new leader exist and we get heartbeat)
-    if ( state_.role != candidate ) {
-      return;
-    }
+      auto reply = replyOpt.value();
+      LogInfo("Received RequestVote Response from PeerId=" + std::to_string( id )
+              + " " + reply.str());
 
-    // check if new term
-    if ( response.term > startTerm ) {
-      BecomeFollower( response.term );
-      return;
-    }
-
-    if ( response.term == startTerm && response.voteGranted ) {
-      votesReceived++;
-
-      // check if majority votes received
-      if ( votesReceived > peers_.size() / 2 ) {
-        BecomeLeader();
+      std::lock_guard<std::mutex> lock( state_.Mut );
+      if ( state_.Role != RaftRole::Candidate ) {
         return;
       }
-    }
+
+      if ( reply.term > savedCurrentTerm ) {
+        becomeFollower( reply.term );
+        return;
+      } else if ( reply.term == savedCurrentTerm ) {
+        if ( reply.voteGranted ) {
+          state_.VotesReceived++;
+          if ( state_.VotesReceived * 2 > peers_.size() ) {
+            LogInfo("Id=" + std::to_string(id_) + " elected as leader");
+            becomeLeader();
+          }
+        }
+      }
+    });
+    th.detach();
   }
 
 }
 
-
 template <class T>
-void RaftManager<T>::busy()
+void RaftManager<T>::electionImpl()
 {
-  // start off as follower
-  BecomeFollower(0);
-
   // Used for selecting election timeouts
-  size_t leaderHeartBeatInterval = 100;
+  auto electionTimeoutMillis = getRandomElectionTimeout();
 
-  while (1)
+  while( keepRunning_ )
   {
-    if (state_.role == leader)
-    {
-      // Send heartbeat RPCs to all peers
-      raft::AppendEntriesParams args = {
-        .term = state_.term,
-        .leaderId = state_.PeerId,
-        .prevLogIndex = -1, // not important
-        .prevLogTerm = -1, // not important
-        .entries = {},
-        .leaderCommit = -1, // not important
-      };
-      for (auto& peer : peers_)
+    std::this_thread::sleep_for( std::chrono::milliseconds( electionTimeoutMillis ) );
+    std::lock_guard<std::mutex> lock( state_.Mut );
+    auto role = state_.Role;
+    auto timedOut = std::chrono::system_clock::now() 
+                      - state_.ElectionResetEvent > std::chrono::milliseconds( electionTimeoutMillis );
+    switch ( role ) {
+      case RaftRole::Leader:
+        break;
+      case RaftRole::Candidate:
+        break; // we shouldn't be here ideally
+      case RaftRole::Follower:
       {
-        peer.AppendEntries(args);
+        if ( timedOut ) {
+          startElection();
+        }
+        break;
       }
-
-      std::this_thread::sleep_for(std::chrono::milliseconds(leaderHeartBeatInterval));
-    }
-    else if (state_.role == follower)
-    {
-      if (std::chrono::system_clock::now() - state_.electionResetEvent > state_.electionTimeout)
+      case RaftRole::Dead:
       {
-        // No heartbeat => lection timeout, start election
-        StartElection();
+        // if the replica is dead (how?)
+        // we just turn everything off
+        keepRunning_ = false;
+        break;
       }
-    }
-    else if (state_.role == candidate)
-    {
-      StartElection();
     }
   }
 }
