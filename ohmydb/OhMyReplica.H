@@ -67,29 +67,30 @@ inline void ReplicaManager::initialiseServices(
 
   std::map<int32_t, std::unique_ptr<RaftClient>> peers;
   
+  // construct RPC clients for all peers (excluding the replica we are at)
+  for ( size_t i = 0; i < servers.size(); ++i ) {
+    if ( (int)i == id ) {
+      continue;
+    }
+    auto address = servers[i].ip + ":" + std::to_string(servers[i].port); 
+    peers[i] = std::make_unique<RaftClient>(grpc::CreateChannel(
+        address, grpc::InsecureChannelCredentials())); 
+  }
+
+  LogInfo( "Waiting for a majority of peers to be up..." )
   // keep pinging until a majority of peers are up
-  while ( 1 ) {
-    int activePeers = 1; // myself
-    for ( size_t i = 0; i < servers.size(); ++i ) {
-      if ( (int)i == id ) {
-        continue;
-      }
-      auto address = servers[i].ip + ":" + std::to_string(servers[i].port); 
-      if ( peers.find(i) == peers.end() ) {
-        peers[i] = std::make_unique<RaftClient>(grpc::CreateChannel(
-            address, grpc::InsecureChannelCredentials()));
-      }
-      if ( peers[i]->Ping(1) > 0 ) {
+  while ( true ) {
+    auto activePeers = 1; // myself
+    for ( auto& [i, peer]: peers ) {
+      if ( peer->Ping(1) > 0 ) {
         LogInfo( "ping OK: " + std::to_string(i) );
         ++activePeers;
       }
     }
-
     if ( !waitForPeers || ( activePeers * 2 > servers.size() ) ) {
       break;
     }
-    LogInfo( "Waiting for a majority of peers to be up..." )
-    sleep(1);
+    std::this_thread::sleep_for( std::chrono::seconds( 1 ) );
   }
 
   raft_.initialiseConnections( id, std::move(peers) );

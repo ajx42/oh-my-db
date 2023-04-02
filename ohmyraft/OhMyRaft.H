@@ -194,17 +194,21 @@ void RaftManager<T>::runLeaderOneIter()
       args.prevLogIndex = prevLogIndex;
       args.prevLogTerm = prevLogTerm;
       args.leaderCommit = state_.CommitIndex;
-      // @FIXME: remove this, the log if for debugging only
-      if ( args.entries.size() ) {
-        LogInfo("Sending: " + args.str() );  
-      }
-      // --
       state_.Mut.unlock();
 
       auto replyOpt = peers_[id]->AppendEntries( args );
       if ( ! replyOpt.has_value() ) {
         return;
       }
+
+      // @FIXME: logs for debugging
+      if ( ! args.entries.empty() ) {
+        LogInfo("Sent (with entries) AppendEntriesRPC to PeerId=" + std::to_string( id ) 
+            + " " + args.str());
+        LogInfo("Response Received to AppendEntriesRPC from PeerId=" + std::to_string( id )
+            + " " + replyOpt.value().str());
+      }
+      // --
       
       auto reply = replyOpt.value();
       std::lock_guard<std::mutex> lock( state_.Mut );
