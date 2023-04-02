@@ -358,7 +358,7 @@ AppendEntriesRet RaftManager<T>::AppendEntries( AppendEntriesParams args )
       becomeFollower( args.term );
     }
     if ( args.prevLogIndex == -1 ||
-         ( args.prevLogIndex < state_.Logs.size() && args.prevLogIndex == state_.Logs[args.prevLogIndex].term) )
+         ( args.prevLogIndex < state_.Logs.size() && args.prevLogTerm == state_.Logs[args.prevLogIndex].term) )
     {
       reply.success = true;
       auto logInsertIndex = args.prevLogIndex + 1;
