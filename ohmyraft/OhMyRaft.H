@@ -154,6 +154,9 @@ bool RaftManager<T>::submit( RaftOp op )
   return true;
 }
 
+// This method sends one round of AppendEntries to all
+// connected peers. Based on the replies, we determine if
+// any additional jobs can be committed.
 template <class T>
 void RaftManager<T>::runLeaderOneIter()
 {
@@ -191,9 +194,11 @@ void RaftManager<T>::runLeaderOneIter()
       args.prevLogIndex = prevLogIndex;
       args.prevLogTerm = prevLogTerm;
       args.leaderCommit = state_.CommitIndex;
+      // @FIXME: remove this, the log if for debugging only
       if ( args.entries.size() ) {
         LogInfo("Sending: " + args.str() );  
       }
+      // --
       state_.Mut.unlock();
 
       auto replyOpt = peers_[id]->AppendEntries( args );
@@ -234,6 +239,7 @@ void RaftManager<T>::runLeaderOneIter()
               raftOut_.push_back( state_.Logs[i].op );
             }
             state_.LastApplied = state_.CommitIndex;
+            // signal the executer to take care of queued operations
             moreExecJobsReady_.signal();
           }
 
@@ -251,17 +257,18 @@ template <class T>
 void RaftManager<T>::raftImpl()
 {
   while ( keepRunning_ ) {
-    //moreInputsReady_.wait();
+    // this is a hot loop, but is invoked periodically
+    // so it's not spinning as tightly as we may think
     raftInMutex_.lock();
     std::swap( dispatchOut_, raftIn_ ); 
     raftInMutex_.unlock();
 
-    // @FIXME: All this logic is a placeholder till we actually build out RAFT.
     state_.Mut.lock();
     auto role = state_.Role;
     state_.Mut.unlock();
+    
     if ( role == RaftRole::Leader ) {
-      // sending heartbeats
+      // send one round of appendentries
       runLeaderOneIter();
     }
 
@@ -277,7 +284,11 @@ template <class T>
 void RaftManager<T>::executerImpl()
 {
   while ( keepRunning_ ) {
+    // we are using the TimeTravelSignal wait for jobs
     moreExecJobsReady_.wait();
+
+    // once we know we actually have stuff to execute, we pull
+    // whatever is in the queue
     raftOutMutex_.lock();
     std::swap( execIn_, raftOut_ );
     raftOutMutex_.unlock();
@@ -292,6 +303,9 @@ void RaftManager<T>::executerImpl()
 template <class T>
 void RaftManager<T>::start()
 {
+  // The application consists of 3 threads that last throughout
+  // the run and several more threads spawned by these for a short
+  // time to achieve parallelism where possible.
   keepRunning_ = true;
   electionThread = std::thread([this]{electionImpl();});
   executerThread = std::thread([this]{executerImpl();});
@@ -316,9 +330,8 @@ RaftManager<T>::~RaftManager()
   stop();
 }
 
-// RAFT Standard RPC Implementations. @TODO: Note the structs for args and results are
-// placeholders, please fill them up ConsensusUtils.H.
-// Furthermore, These calls land in RPCServiceImpl.C where data is repackaged to RPC-able
+// RAFT Standard RPC ImplementationsN
+// These calls land in RPCServiceImpl.C where data is repackaged to RPC-able
 // format. So after implementing here, the packaging logic also needs to be implemented.
 // Note calls can happen in parallel, so ensure thread safety while accessing state.
 
@@ -379,21 +392,26 @@ AppendEntriesRet RaftManager<T>::AppendEntries( AppendEntriesParams args )
       }
 
       if ( args.leaderCommit > state_.CommitIndex ) {
+        // this means we have new jobs that can now be committed
         state_.CommitIndex = std::min( args.leaderCommit, (int32_t) state_.Logs.size() - 1 );
         std::lock_guard<std::mutex> rom(raftOutMutex_);
+        // queue all jobs that can be committed to be fed to the executer
         for ( size_t i = state_.LastApplied + 1; i <= state_.CommitIndex; ++i ) {
           raftOut_.push_back( state_.Logs[i].op );
         }
         state_.LastApplied = state_.CommitIndex;
+        // signal the executer to take care of the queued jobs
         moreExecJobsReady_.signal();
       }
     }
   }
 
   reply.term = state_.CurrentTerm;
+  // @FIXME: remove, the below log is for debugging only
   if ( ! args.entries.empty() ) {
     LogInfo("Replying: " + reply.str());
   }
+  // --
   return reply;
 }
 
@@ -411,7 +429,6 @@ RequestVoteRet RaftManager<T>::RequestVote( RequestVoteParams args )
   }
 
   if ( args.term > state_.CurrentTerm ) {
-    // become follower
     becomeFollower( args.term );
   }
 
@@ -470,6 +487,8 @@ void RaftManager<T>::becomeLeader()
 }
 // -- end of role transition helpers
 
+// this may feel like a long election timeout, it actually is
+// but helps while coding and testing since it reduces the noise in logs
 template <class T>
 int32_t RaftManager<T>::getRandomElectionTimeout()
 {
@@ -494,6 +513,7 @@ void RaftManager<T>::startElection()
   state_.VotesReceived = 1; // vote for self
   
   for ( auto& [id, _] : peers_ ) {
+    // parallel send RequestVote to all connected peers
     auto th = std::thread([id = id, savedCurrentTerm, this]{
       // this means we will wait here till the launching method
       // is done
@@ -572,6 +592,8 @@ void RaftManager<T>::electionImpl()
       }
       case RaftRole::Dead:
       {
+        // we still need to figure out when to set replica as dead
+        // keeping this role here because maybe it is useful during config change
         // if the replica is dead (how?)
         // we just turn everything off
         keepRunning_ = false;
