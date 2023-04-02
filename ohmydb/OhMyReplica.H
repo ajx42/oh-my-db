@@ -43,6 +43,7 @@ private:
   RaftService raftService_;
   
   std::thread raftServer_;
+
 };
 
 inline void ReplicaManager::initialiseServices(
@@ -64,26 +65,36 @@ inline void ReplicaManager::initialiseServices(
   });
   raftServer_.detach();
 
-  std::vector<RaftClient> peers;
-  for ( int i = 0; i < servers.size(); ++i ) {
-    if ( i == id ) {
+  std::map<int32_t, std::unique_ptr<RaftClient>> peers;
+  
+  // construct RPC clients for all peers (excluding the replica we are at)
+  for ( size_t i = 0; i < servers.size(); ++i ) {
+    if ( (int)i == id ) {
       continue;
     }
     auto address = servers[i].ip + ":" + std::to_string(servers[i].port); 
-    peers.push_back( RaftClient(grpc::CreateChannel(
-        address, grpc::InsecureChannelCredentials())));
-    
-    if ( waitForPeers ) {
-      while ( peers.back().Ping(1) < 0 ) {
-        sleep(1);
-      }
-      LogInfo( "ping OK: " + std::to_string(i) );
-    }
+    peers[i] = std::make_unique<RaftClient>(grpc::CreateChannel(
+        address, grpc::InsecureChannelCredentials())); 
   }
-  raft_.attachPeers( std::move(peers) );
-  raft_.setId( id ); 
-  LogInfo( "Services Started: Raft Initialised" );
 
+  LogInfo( "Waiting for a majority of peers to be up..." )
+  // keep pinging until a majority of peers are up
+  while ( true ) {
+    auto activePeers = 1; // myself
+    for ( auto& [i, peer]: peers ) {
+      if ( peer->Ping(1) > 0 ) {
+        LogInfo( "ping OK: " + std::to_string(i) );
+        ++activePeers;
+      }
+    }
+    if ( !waitForPeers || ( activePeers * 2 > servers.size() ) ) {
+      break;
+    }
+    std::this_thread::sleep_for( std::chrono::seconds( 1 ) );
+  }
+
+  raft_.initialiseConnections( id, std::move(peers) );
+  LogInfo( "Services Started: Raft Initialised" );
 }
 
 inline void ReplicaManager::start()
@@ -113,8 +124,12 @@ inline std::optional<int> ReplicaManager::get( int key )
     .promiseHandle = { it }
   };
 
-  raft_.submit( op );
-
+  auto isSubmitted = raft_.submit( op );
+  if ( ! isSubmitted ) {
+    raft::PromiseStore<raft::RaftOp::res_t>::Instance()
+     .getAndRemove( it );
+    return {}; 
+  }
   return std::get<std::optional<int>>( ft.get() );
 }
 
@@ -131,8 +146,12 @@ inline bool ReplicaManager::put( std::pair<int, int> kvp )
     .promiseHandle = { it }
   };
 
-  raft_.submit( op );
-
+  bool isSubmitted = raft_.submit( op );
+  if ( ! isSubmitted ) {
+    raft::PromiseStore<raft::RaftOp::res_t>::Instance()
+      .getAndRemove( it );
+    return false;
+  }
   return std::get<bool>( ft.get() );
 }
 

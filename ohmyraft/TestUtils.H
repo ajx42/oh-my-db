@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <vector>
 #include <iostream>
 #include "ConsensusUtils.H"
@@ -22,8 +23,8 @@ private:
 // The real deal is in RaftService and OhMyRaft
 class RaftClientProxy {
 public:
-  AppendEntriesRet AppendEntries( AppendEntriesParams ) { return {}; }
-  RequestVoteRet RequestVote( RequestVoteParams ) { return {}; }
+  std::optional<AppendEntriesRet> AppendEntries( AppendEntriesParams ) { return {}; }
+  std::optional<RequestVoteRet> RequestVote( RequestVoteParams ) { return {}; }
 };
 
 using Follower = FollowerProxy;
