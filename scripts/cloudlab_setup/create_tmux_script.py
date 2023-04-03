@@ -6,7 +6,6 @@ import subprocess as sp
 
 import smparser
 
-from smutils import smfiles, consts
 from argparse import ArgumentParser
 
 def __init_node_tmux(node, session):
