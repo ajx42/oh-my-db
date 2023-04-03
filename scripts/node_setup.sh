@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # change shell to bash
-sudo usermod -s /bin/bash $username
+sudo usermod -s /bin/bash $USER
 
 # update gcc
 yes '' | sudo add-apt-repository ppa:ubuntu-toolchain-r/test
