@@ -11,10 +11,6 @@
 
 class OhMyDBService final : public ohmydb::OhMyDB::Service
 {
-private:
-    leveldb::DB *db;
-    leveldb::Options options;
-
 public:
     explicit OhMyDBService() {}
 
