@@ -64,7 +64,7 @@ public:
     state_.CommitIndex = -1;
     state_.LastApplied = -1;
     state_.VotesReceived = 0;
-    state_.LastKnownLeaderId = -1;
+    state_.LastKnownLeaderId = 0;
   }
 
   ~RaftManager();
@@ -195,6 +195,7 @@ void RaftManager<T>::runLeaderOneIter()
       args.prevLogIndex = prevLogIndex;
       args.prevLogTerm = prevLogTerm;
       args.leaderCommit = state_.CommitIndex;
+      args.leaderId = id_;
       state_.Mut.unlock();
 
       auto replyOpt = peers_[id]->AppendEntries( args );
@@ -349,6 +350,9 @@ AppendEntriesRet RaftManager<T>::AppendEntries( AppendEntriesParams args )
   if ( state_.Role == RaftRole::Dead ) {
     return {};
   }
+
+  // update leader
+  state_.LastKnownLeaderId = args.leaderId;
 
   if ( args.term > state_.CurrentTerm ) {
     LogInfo("CurrentTerm out of date");

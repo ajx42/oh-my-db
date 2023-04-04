@@ -101,14 +101,24 @@ target_link_libraries(ohmyraftrpc
   ${_GRPC_GRPCPP}
   ${_PROTOBUF_LIBPROTOBUF})
 
+add_library(dbserverrpc "${CMAKE_CURRENT_SOURCE_DIR}/DatabaseServiceImpl.C")
+
+target_link_libraries(dbserverrpc
+  ${raft_grpc_proto}
+  ${_REFLECTION}
+  ${_GRPC_GRPCPP}
+  ${_PROTOBUF_LIBPROTOBUF})
+
 # Link against LevelDB and other required libraries
 target_link_libraries(server leveldb)
 target_link_libraries(server ohmyraftrpc)
+target_link_libraries(server dbserverrpc)
 target_link_libraries(server db_grpc_proto)
 target_link_libraries(server raft_grpc_proto)
 
 target_link_libraries(replica leveldb)
 target_link_libraries(replica ohmyraftrpc)
+target_link_libraries(replica dbserverrpc)
 target_link_libraries(replica db_grpc_proto)
 target_link_libraries(replica raft_grpc_proto)
 

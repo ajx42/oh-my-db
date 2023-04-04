@@ -2,18 +2,19 @@
 #include <string>
 #include <sstream>
 #include <unistd.h>
+#include <memory>
 #include <argparse/argparse.hpp>
 
 #include "DatabaseClient.H"
 #include "DatabaseUtils.H"
 #include "WowLogger.H"
 
-void get(OhMyDBClient& client, int key) {
+void get(std::unique_ptr<OhMyDBClient>& client, int key) {
     std::optional<ohmydb::Ret> retOpt;
     ohmydb::Ret ret;
 
     do {
-        retOpt = client.Get(key);
+        retOpt = client->Get(key);
 
         if (!retOpt.has_value()) {
             LogInfo("Get " + std::to_string(key) + ": RPC No response");
@@ -24,7 +25,9 @@ void get(OhMyDBClient& client, int key) {
 
         if (ret.errorCode == ohmydb::ErrorCode::NOT_LEADER) {
             LogInfo("Get " + std::to_string(key) + ": Not leader, redirecting to " + ret.leaderAddr);
-            client.SetServerAddress(ret.leaderAddr);
+            client.reset(
+                new OhMyDBClient(grpc::CreateChannel(ret.leaderAddr, grpc::InsecureChannelCredentials()))
+            );
             sleep(1);
         } else {
             break;
@@ -40,12 +43,12 @@ void get(OhMyDBClient& client, int key) {
     }
 }
 
-void put(OhMyDBClient& client, int key, int value) {
+void put(std::unique_ptr<OhMyDBClient>& client, int key, int value) {
     std::optional<ohmydb::Ret> retOpt;
     ohmydb::Ret ret;
 
     do {
-        retOpt = client.Put(key, value);
+        retOpt = client->Put(key, value);
 
         if (!retOpt.has_value()) {
             LogInfo("Put (" + std::to_string(key) + ", " + std::to_string(value) + 
@@ -58,7 +61,9 @@ void put(OhMyDBClient& client, int key, int value) {
         if (ret.errorCode == ohmydb::ErrorCode::NOT_LEADER) {
             LogInfo( "Put (" + std::to_string(key) + ", " + std::to_string(value) +
                  "): Not leader, redirecting to " + ret.leaderAddr );
-            client.SetServerAddress(ret.leaderAddr);
+            client.reset(
+                new OhMyDBClient(grpc::CreateChannel(ret.leaderAddr, grpc::InsecureChannelCredentials()))
+            );
             sleep(1);
         } else {
             break;
@@ -88,11 +93,14 @@ int main(int argc, char **argv)
     // parse arguments
     auto server_addr = program.get<std::string>("--server_address");
 
-    OhMyDBClient client(server_addr);
+    // OhMyDBClient client(server_addr);
+    // create pointer to a OhMyDBClient object
+    std::unique_ptr<OhMyDBClient> client = std::make_unique<OhMyDBClient>(
+        grpc::CreateChannel(server_addr, grpc::InsecureChannelCredentials())
+    );
+    
 
-    client.Ping(1);
-
-    /* for test only*/
+    // /* for test only*/
     get(client, 1);
     put(client, 1, 2);
     get(client, 1);

@@ -11,19 +11,15 @@
 class OhMyDBClient
 {
 public:
-    OhMyDBClient(const std::string& server_addr)
-        : channel_(grpc::CreateChannel(server_addr, grpc::InsecureChannelCredentials()))
-        , stub_(ohmydb::OhMyDB::NewStub(channel_)) {}
+    OhMyDBClient(std::shared_ptr<grpc::Channel> channel)
+        : stub_(ohmydb::OhMyDB::NewStub(channel)) {}
     int32_t Ping(int32_t cmd);
 
     std::optional<ohmydb::Ret> Put(int key, int value);
     std::optional<ohmydb::Ret> Get(int key);
 
-    void SetServerAddress(const std::string& server_addr);
-
 private:
     std::unique_ptr<ohmydb::OhMyDB::Stub> stub_;
-    std::shared_ptr<grpc::Channel> channel_;
 };
 
 // Note this method is only used for Testing
@@ -89,9 +85,4 @@ OhMyDBClient::Get(int key)
         std::cerr << "Get: RPC Failed" << std::endl;
         return {};
     }
-}
-
-void OhMyDBClient::SetServerAddress(const std::string& server_addr) {
-  channel_ = grpc::CreateChannel(server_addr, grpc::InsecureChannelCredentials());
-  stub_ = ohmydb::OhMyDB::NewStub(channel_);
 }

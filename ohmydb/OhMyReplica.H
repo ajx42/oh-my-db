@@ -57,7 +57,7 @@ inline void ReplicaManager::initialiseServices(
     std::vector<ServerInfo>&& servers, int id, bool waitForPeers, std::string dbPath, int dbPort )
 {
   servers_ = std::move(servers);
-  auto raftPort = servers_[id].port;
+  auto raftPort = servers_[id].raft_port;
   auto raftIp = servers_[id].ip;
 
   raft::LevelDB<int,int>::Instance().initialize(dbPath);
@@ -82,7 +82,7 @@ inline void ReplicaManager::initialiseServices(
     if ( (int)i == id ) {
       continue;
     }
-    auto address = servers_[i].ip + ":" + std::to_string(servers_[i].port); 
+    auto address = servers_[i].ip + ":" + std::to_string(servers_[i].raft_port); 
     peers[i] = std::make_unique<RaftClient>(grpc::CreateChannel(
         address, grpc::InsecureChannelCredentials())); 
   }
@@ -149,7 +149,7 @@ inline ohmydb::Ret ReplicaManager::get( int key )
   if ( ! isSubmitted ) {
     raft::PromiseStore<raft::RaftOp::res_t>::Instance()
      .getAndRemove( it );
-    std::string leaderAddr = servers_[leaderId].ip + ":" + std::to_string(servers_[leaderId].port);
+    std::string leaderAddr = servers_[leaderId].ip + ":" + std::to_string(servers_[leaderId].db_port);
     return { ohmydb::ErrorCode::NOT_LEADER, leaderAddr, -1 };
   }
 
@@ -178,7 +178,7 @@ inline ohmydb::Ret ReplicaManager::put( std::pair<int, int> kvp )
   if ( ! isSubmitted ) {
     raft::PromiseStore<raft::RaftOp::res_t>::Instance()
       .getAndRemove( it );
-    std::string leaderAddr = servers_[leaderId].ip + ":" + std::to_string(servers_[leaderId].port);
+    std::string leaderAddr = servers_[leaderId].ip + ":" + std::to_string(servers_[leaderId].db_port);
     return { ohmydb::ErrorCode::NOT_LEADER, leaderAddr, -1 };
   }
 

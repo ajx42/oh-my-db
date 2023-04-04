@@ -8,7 +8,8 @@
 
 struct ServerInfo {
     std::string ip;
-    int port;
+    int raft_port;
+    int db_port;
     std::string name;
 };
 
@@ -43,7 +44,8 @@ inline std::vector<ServerInfo> ParseConfig(std::string filename)
         ServerInfo server;
         server.name = tokens[header["name"]];
         server.ip = tokens[header["intf_ip"]];
-        server.port = stoi(tokens[header["port"]]);
+        server.raft_port = stoi(tokens[header["raft_port"]]);
+        server.db_port = stoi(tokens[header["db_port"]]);
         servers.push_back(server);
     }
     return servers;
