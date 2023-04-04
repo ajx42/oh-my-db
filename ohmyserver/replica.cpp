@@ -91,7 +91,7 @@ int main(int argc, char **argv)
   auto selfDetails = servers[id];
   printServer("MyDetails", id);
 
-  ReplicaManager::Instance().initialiseServices( servers, id, true, db_path);  
+  ReplicaManager::Instance().initialiseServices( std::move(servers), id, true, db_path, db_port );  
   ReplicaManager::Instance().start();
 
   std::this_thread::sleep_for(std::chrono::seconds(5));

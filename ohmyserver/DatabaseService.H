@@ -1,17 +1,13 @@
 #pragma once
 
-#include <string>
-#include <unordered_map>
-#include <vector>
-#include <fstream>
+#include "OhMyReplica.H"
+#include "WowLogger.H"
 
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/health_check_service_interface.h>
 
 #include "db.grpc.pb.h"
-
-#include "OhMyConfig.H"
 
 class OhMyDBService final : public ohmydb::OhMyDB::Service
 {
@@ -20,19 +16,10 @@ private:
     leveldb::Options options;
 
 public:
-    explicit OhMyDBService()
-    {
-        // leveldb setup
-        options.create_if_missing = true;
-        leveldb::Status status = leveldb::DB::Open(options, "/tmp/testdb", &db);
-        if (!status.ok())
-        {
-            std::cerr << "Unable to open/create database" << std::endl;
-        }
-    }
+    explicit OhMyDBService() {}
 
     grpc::Status TestCall(grpc::ServerContext *, const ohmydb::Cmd *, ohmydb::Ack *);
-    grpc::Status Put(grpc::ServerContext *, const ohmydb::PutRequest *, ohmydb::Ack *);
+    grpc::Status Put(grpc::ServerContext *, const ohmydb::PutRequest *, ohmydb::PutResponse *);
     grpc::Status Get(grpc::ServerContext *, const ohmydb::GetRequest *, ohmydb::GetResponse *);
 };
 
@@ -45,34 +32,26 @@ inline grpc::Status OhMyDBService::TestCall(
 }
 
 inline grpc::Status OhMyDBService::Put(
-    grpc::ServerContext *, const ohmydb::PutRequest *request, ohmydb::Ack *ack)
+    grpc::ServerContext *, const ohmydb::PutRequest *request, ohmydb::PutResponse *response)
 {
-    leveldb::Status status = db->Put(leveldb::WriteOptions(), request->key(), request->value());
-    if (status.ok())
-    {
-        ack->set_ok(0);
-    }
-    else
-    {
-        ack->set_ok(-1);
-    }
+    int key = request->key();
+    int val = request->value();
+    auto ret = ReplicaManager::Instance().put( {key, val} );
+
+    response->set_error_code(ret.errorCode);
+    response->set_leader_addr(ret.leaderAddr);
     return grpc::Status::OK;
 }
 
 inline grpc::Status OhMyDBService::Get(
     grpc::ServerContext *, const ohmydb::GetRequest *request, ohmydb::GetResponse *response)
 {
-    std::string value;
-    leveldb::Status status = db->Get(leveldb::ReadOptions(), request->key(), &value);
-    if (status.ok())
-    {
-        response->set_ok(0);
-        response->set_value(value);
-    }
-    else
-    {
-        response->set_ok(-1);
-    }
+    int key = request->key();
+    auto ret = ReplicaManager::Instance().get( key );
+
+    response->set_error_code(ret.errorCode);
+    response->set_leader_addr(ret.leaderAddr);
+    response->set_value(ret.value.value_or(-1));
 
     return grpc::Status::OK;
 }
