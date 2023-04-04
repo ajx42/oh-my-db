@@ -18,6 +18,7 @@ include_directories("${CMAKE_CURRENT_SOURCE_DIR}/wowUtils")
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/ohmyserver")
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/ohmyraft")
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/ohmydb")
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/leveldb/include")
 
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/argparse/include")
 

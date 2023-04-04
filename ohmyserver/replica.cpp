@@ -60,6 +60,10 @@ int main(int argc, char **argv)
       .required()
       .help("should match the row idx (0-based)");
 
+  program.add_argument("--db_path")
+      .required()
+      .help("leveldb file path");
+
   try {
       program.parse_args( argc, argv );
   }
@@ -73,6 +77,7 @@ int main(int argc, char **argv)
   auto db_port = program.get<std::string>("--db_port");
   auto config_path = program.get<std::string>("--config");
   auto id = std::stoi(program.get<std::string>("--id"));
+  auto db_path = program.get<std::string>("--db_path");
 
   auto servers = ParseConfig(config_path);
 
@@ -86,7 +91,7 @@ int main(int argc, char **argv)
   auto selfDetails = servers[id];
   printServer("MyDetails", id);
 
-  ReplicaManager::Instance().initialiseServices( servers, id, true );  
+  ReplicaManager::Instance().initialiseServices( servers, id, true, db_path);  
   ReplicaManager::Instance().start();
 
   std::this_thread::sleep_for(std::chrono::seconds(5));
