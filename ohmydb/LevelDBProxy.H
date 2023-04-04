@@ -59,13 +59,13 @@ public:
     }
   }
 
-private:
-  LevelDBReal() {
+  void initialize(std::string db_path)
+  {
     options.create_if_missing = true;
 
     //Will currently fail to open if multiple instances running on same node as
     //paths conflict.
-    status = leveldb::DB::Open(options, "/tmp/testdb", &db);
+    status = leveldb::DB::Open(options, db_path, &db);
 
     if (!status.ok())
     {
@@ -78,6 +78,8 @@ private:
 
   }
 
+private:
+  LevelDBReal() {}
   leveldb::DB *db;
   leveldb::Options options;
   leveldb::Status status;
@@ -102,6 +104,10 @@ public:
   bool put( std::pair<KeyT, ValT> kvp ) {
     mpp[kvp.first] = kvp.second;
     return true;
+  }
+
+  void initialize(std::string db_path)
+  {
   }
 
 private:

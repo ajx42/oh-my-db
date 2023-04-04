@@ -4,6 +4,7 @@
 #include "OhMyConfig.H"
 #include "OhMyRaft.H"
 #include "RaftService.H"
+#include "ohmydb/LevelDBProxy.H"
 
 class ReplicaManager {
 public:
@@ -16,7 +17,7 @@ public:
   // and connect to peers as well. waitForPeers makes the replica ping each
   // peer before starting operation. This should be used for testing only!
   void initialiseServices(
-      std::vector<ServerInfo> servers, int id, bool waitForPeers ); 
+      std::vector<ServerInfo> servers, int id, bool waitForPeers, std::string db_path ); 
 
   // These methods are accessed by the Database RPC server layer. But exposing
   // them as public methods here allows for quick testing :D
@@ -47,10 +48,12 @@ private:
 };
 
 inline void ReplicaManager::initialiseServices(
-    std::vector<ServerInfo> servers, int id, bool waitForPeers )
+    std::vector<ServerInfo> servers, int id, bool waitForPeers, std::string db_path)
 {
   auto raftPort = servers[id].port;
   auto raftIp = servers[id].ip;
+
+  raft::LevelDB<std::string,std::string>::Instance().initialize(db_path);
 
   grpc::EnableDefaultHealthCheckService(true);
   grpc::reflection::InitProtoReflectionServerBuilderPlugin();
