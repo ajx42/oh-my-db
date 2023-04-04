@@ -53,7 +53,7 @@ inline void ReplicaManager::initialiseServices(
   auto raftPort = servers[id].port;
   auto raftIp = servers[id].ip;
 
-  raft::LevelDB<std::string,std::string>::Instance().initialize(db_path);
+  raft::LevelDB<int,int>::Instance().initialize(db_path);
 
   grpc::EnableDefaultHealthCheckService(true);
   grpc::reflection::InitProtoReflectionServerBuilderPlugin();

@@ -18,6 +18,9 @@ public:
   }
   
   std::optional<ValT> get( KeyT key ) {
+
+    static_assert(std::is_integral<KeyT>::value);
+
     std::string value_str;
     ValT value;
     
@@ -40,6 +43,9 @@ public:
   }
 
   bool put( std::pair<KeyT, ValT> kvp ) {
+    static_assert(std::is_integral<KeyT>::value);
+    static_assert(std::is_integral<ValT>::value);
+
     // Create a leveldb::Slice object for the key and value
     leveldb::Slice key(reinterpret_cast<const char*>(&kvp.first), sizeof(kvp.first));
     leveldb::Slice value(reinterpret_cast<const char*>(&kvp.second), sizeof(kvp.second));
