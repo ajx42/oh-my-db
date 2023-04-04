@@ -19,7 +19,7 @@ public:
   // and connect to peers as well. waitForPeers makes the replica ping each
   // peer before starting operation. This should be used for testing only!
   void initialiseServices(
-      std::vector<ServerInfo>&& servers, int id, bool waitForPeers, std::string dbPath, int dbPort ); 
+      std::vector<ServerInfo>& servers, int id, bool waitForPeers, std::string dbPath ); 
 
   // These methods are accessed by the Database RPC server layer. But exposing
   // them as public methods here allows for quick testing :D
@@ -54,9 +54,9 @@ private:
 };
 
 inline void ReplicaManager::initialiseServices(
-    std::vector<ServerInfo>&& servers, int id, bool waitForPeers, std::string dbPath, int dbPort )
+    std::vector<ServerInfo>& servers, int id, bool waitForPeers, std::string dbPath )
 {
-  servers_ = std::move(servers);
+  servers_ = servers;
   auto raftPort = servers_[id].raft_port;
   auto raftIp = servers_[id].ip;
 
@@ -108,6 +108,7 @@ inline void ReplicaManager::initialiseServices(
 
   // start Database RPC server
   auto dbIp = servers_[id].ip;
+  auto dbPort = servers_[id].db_port;
   std::string dbServerAddr(dbIp + ":" + std::to_string(dbPort));
   dbBuilder_.AddListeningPort(dbServerAddr, grpc::InsecureServerCredentials());
   dbBuilder_.RegisterService(&dbService_);

@@ -28,7 +28,8 @@ parse_ssh_hosts()
         ((i=i+1))
         continue
       fi
-      arr[i-1]=$(echo $line | awk -F',' '{print $6"@"$4}')
+      # here assuming the 4-th column is the hostname, and 5-th column is the username
+      arr[i-1]=$(echo $line | awk -F',' '{print $5"@"$4}')
       ((i=i+1))
     done < config.csv
     echo ${arr[@]}
@@ -62,4 +63,4 @@ python3 oh-my-db/scripts/cloudlab_setup/create_tmux_script.py \
     --output tmux_script.sh
 
 chmod +x tmux_script.sh
-./tmux_script.sh
+./tmux_script.sh # comment this out if you don't want to use tmux
