@@ -21,22 +21,17 @@ public:
   }
   
   std::optional<ValT> get( KeyT key ) {
-    std::string value_str;
-    ValT value;
+    std::string valueStr;
     
     // Create a leveldb::Slice object for the key
     auto keyStr = std::to_string( key );
     leveldb::Slice keySlice( keyStr.c_str(), keyStr.size() );
 
-    leveldb::Status status = db->Get(leveldb::ReadOptions(), keySlice, &value_str);
-    if (status.ok())
-    {
+    leveldb::Status status = db->Get(leveldb::ReadOptions(), keySlice, &valueStr);
+    if ( status.ok() ) {
       LogInfo("Get successful.");
-      if(!value_str.empty())
-      {
-        std::istringstream iss(value_str);
-        iss >> value;
-        return {value};
+      if ( !valueStr.empty() ) {
+        return std::stoi( valueStr );
       }
     }
 
