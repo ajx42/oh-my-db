@@ -25,9 +25,10 @@ public:
     ValT value;
     
     // Create a leveldb::Slice object for the key
-    leveldb::Slice key_slice(reinterpret_cast<const char*>(&key), sizeof(key));
+    auto keyStr = std::to_string( key );
+    leveldb::Slice keySlice( keyStr.c_str(), keyStr.size() );
 
-    leveldb::Status status = db->Get(leveldb::ReadOptions(), key_slice, &value_str);
+    leveldb::Status status = db->Get(leveldb::ReadOptions(), keySlice, &value_str);
     if (status.ok())
     {
       LogInfo("Get successful.");
@@ -44,11 +45,13 @@ public:
 
   bool put( std::pair<KeyT, ValT> kvp ) {
     // Create a leveldb::Slice object for the key and value
-    leveldb::Slice key(reinterpret_cast<const char*>(&kvp.first), sizeof(kvp.first));
-    leveldb::Slice value(reinterpret_cast<const char*>(&kvp.second), sizeof(kvp.second));
+    auto keyStr = std::to_string( kvp.first );
+    auto valStr = std::to_string( kvp.second );
+    leveldb::Slice key( keyStr.c_str(), keyStr.size() );
+    leveldb::Slice val( valStr.c_str(), valStr.size() );
 
     //Put key/value pair.
-    leveldb::Status status = db->Put(leveldb::WriteOptions(), key, value);
+    leveldb::Status status = db->Put(leveldb::WriteOptions(), key, val);
 
     if (status.ok())
     {

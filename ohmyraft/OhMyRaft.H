@@ -41,6 +41,7 @@ struct RaftState
   std::chrono::time_point<std::chrono::system_clock> ElectionResetEvent;
   int32_t CommitIndex; // 
   int32_t LastApplied; // I am not sure why this is not persistent
+  int32_t LastKnownLeaderId;
   
   // for leaders only peer id -> next/match index
   std::map<int32_t, int32_t> NextIndex;
@@ -63,6 +64,7 @@ public:
     state_.CommitIndex = -1;
     state_.LastApplied = -1;
     state_.VotesReceived = 0;
+    state_.LastKnownLeaderId = 0;
   }
 
   ~RaftManager();
@@ -74,7 +76,7 @@ public:
   void stop();
 
   // job submission
-  bool submit( RaftOp op );
+  std::pair<bool, int32_t > submit( RaftOp op );
 
   // raft rpc implementations
   AppendEntriesRet AppendEntries( AppendEntriesParams );
@@ -139,19 +141,19 @@ void RaftManager<T>::initialiseConnections(
 }
 
 template <class T>
-bool RaftManager<T>::submit( RaftOp op )
+std::pair<bool, int> RaftManager<T>::submit( RaftOp op )
 {
   std::unique_lock stateLock { state_.Mut };
   if ( state_.Role != RaftRole::Leader ) {
     LogError("This Replica is not the leader. Job can't be submitted.");
-    return false;
+    return { false, state_.LastKnownLeaderId };
   }
   stateLock.unlock();
 
   std::lock_guard<std::mutex> lock( raftInMutex_ );
   dispatchOut_.push_back( op );
   moreInputsReady_.signal();
-  return true;
+  return { true, state_.LastKnownLeaderId };
 }
 
 // This method sends one round of AppendEntries to all
@@ -190,10 +192,10 @@ void RaftManager<T>::runLeaderOneIter()
       }
 
       args.term = savedCurrentTerm;
-      args.leaderId = id_;
       args.prevLogIndex = prevLogIndex;
       args.prevLogTerm = prevLogTerm;
       args.leaderCommit = state_.CommitIndex;
+      args.leaderId = id_;
       state_.Mut.unlock();
 
       auto replyOpt = peers_[id]->AppendEntries( args );
@@ -349,6 +351,9 @@ AppendEntriesRet RaftManager<T>::AppendEntries( AppendEntriesParams args )
     return {};
   }
 
+  // update leader
+  state_.LastKnownLeaderId = args.leaderId;
+
   if ( args.term > state_.CurrentTerm ) {
     LogInfo("CurrentTerm out of date");
     becomeFollower( args.term );
@@ -481,6 +486,7 @@ void RaftManager<T>::becomeLeader()
   state_.Role = RaftRole::Leader;
   state_.ElectionResetEvent = std::chrono::system_clock::now();
   state_.VotedFor = -1;
+  state_.LastKnownLeaderId = id_;
   state_.NextIndex.clear();
   state_.MatchIndex.clear();
   // initialise leader state

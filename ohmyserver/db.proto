@@ -4,7 +4,7 @@ package ohmydb;
 
 service OhMyDB {
     rpc TestCall(Cmd) returns(Ack) {}
-    rpc Put(PutRequest) returns(Ack) {}
+    rpc Put(PutRequest) returns(PutResponse) {}
     rpc Get(GetRequest) returns(GetResponse) {}
 }
 
@@ -17,15 +17,21 @@ message Cmd {
 }
 
 message PutRequest{
-    string key = 1;
-    string value = 2;
+    int32 key = 1;
+    int32 value = 2;
+}
+
+message PutResponse {
+    int32 error_code = 1;
+    string leader_addr = 2;
 }
 
 message GetRequest{
-    string key = 1;
+    int32 key = 1;
 }
 
 message GetResponse{
-    int32 ok = 1;
-    string value = 2;
+    int32 error_code = 1;
+    string leader_addr = 2;
+    int32 value = 3;
 }

@@ -52,10 +52,6 @@ int main(int argc, char **argv)
       .required()
       .help("Config file path");
 
-  program.add_argument("--db_port")
-      .required()
-      .help("DB service port");
-
   program.add_argument("--id")
       .required()
       .help("should match the row idx (0-based)");
@@ -74,7 +70,6 @@ int main(int argc, char **argv)
   }
 
   // parse arguments
-  auto db_port = program.get<std::string>("--db_port");
   auto config_path = program.get<std::string>("--config");
   auto id = std::stoi(program.get<std::string>("--id"));
   auto db_path = program.get<std::string>("--db_path");
@@ -85,22 +80,22 @@ int main(int argc, char **argv)
     LogInfo(tag +
             " ServerId=" + std::to_string(id) +
             " IP=" + servers[id].ip +
-            " Port=" + std::to_string(servers[id].port));
+            " Raft Port=" + std::to_string(servers[id].raft_port) +
+            " DB Port=" + std::to_string(servers[id].db_port));
   };
 
   auto selfDetails = servers[id];
   printServer("MyDetails", id);
 
-  ReplicaManager::Instance().initialiseServices( servers, id, true, db_path);  
+  ReplicaManager::Instance().initialiseServices( servers, id, true, db_path );  
   ReplicaManager::Instance().start();
 
   std::this_thread::sleep_for(std::chrono::seconds(5));
 
   // -- @FIXME: remove once done, for test only
     ReplicaManager::Instance().put( std::make_pair(1, 2) );
-    LogInfo( "Received Output: " + std::to_string( ReplicaManager::Instance().get(1).value_or(-1) ) );
+    LogInfo( "Received Output: " + std::to_string( ReplicaManager::Instance().get(1).value ) );
   // -- 
 
-  //Busy loop, handles election timeouts
-  while( 1 ) { std::this_thread::sleep_for(std::chrono::seconds(10)); }
+  while( 1 ) { std::this_thread::sleep_for(std::chrono::seconds(5)); }
 }

@@ -7,7 +7,7 @@ from collections import namedtuple
 from argparse import ArgumentParser
 import pandas as pd
 
-Node = namedtuple('Node', ['name', 'intf_ip', 'host_ip', 'hostname', 'port', 'username'])
+Node = namedtuple('Node', ['name', 'intf_ip', 'host_ip', 'hostname', 'username'])
 
 def parse_manifest(manifest):
     tree = ET.parse(manifest)
@@ -26,16 +26,19 @@ def parse_manifest(manifest):
         hostname = auth.get('hostname')
         port = auth.get('port')
         username = auth.get('username')
-        details.append(Node(name=name, intf_ip=intf_ip, host_ip=host_ip, hostname=hostname, port=port, username=username))
+        details.append(Node(name=name, intf_ip=intf_ip, host_ip=host_ip, hostname=hostname, username=username))
 
     return details
 
-def create_config(details, raft_port):
-    config = pd.DataFrame(columns=details[0]._fields)
+def create_config(details, raft_port, db_port):
+    config = pd.DataFrame(columns=details[0]._fields+('raft_port', 'db_port'))
 
     for node_info in details:
-        node_info = node_info._replace(port=raft_port)
-        config = pd.concat([config, pd.DataFrame(node_info._asdict(), index=[0])], ignore_index=True)
+        d = node_info._asdict()
+        d['raft_port'] = raft_port
+        d['db_port'] = db_port
+        # remove port
+        config = pd.concat([config, pd.DataFrame(d, index=[0])], ignore_index=True)
     
     return config
 
@@ -45,16 +48,19 @@ def main():
     parser = ArgumentParser()
     parser.add_argument("--manifest", help="manifest for cloudlab")
     parser.add_argument("--raft-port", help="raft port", default=8080)
+    parser.add_argument("--db-port", help="db port", default=12345)
     parser.add_argument("--output", help="output file", default="config.csv")
 
     args = parser.parse_args()
     details = parse_manifest(args.manifest)
+    # note that here we are using the raft port and db port for all nodes
     raft_port = args.raft_port
+    db_port = args.db_port
     file_path = args.output
 
     logging.info('Discovered N={} Nodes: {}'.format(len(details), details))
 
-    config = create_config(details, raft_port)
+    config = create_config(details, raft_port, db_port)
     config.to_csv(file_path, index=False)
 
 

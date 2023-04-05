@@ -2,16 +2,21 @@
 #include <string>
 #include <sstream>
 #include <unistd.h>
+#include <memory>
+#include <thread>
 #include <argparse/argparse.hpp>
 
+#include "ReplicatedDB.H"
 #include "DatabaseClient.H"
+#include "DatabaseUtils.H"
+#include "WowLogger.H"
 
 int main(int argc, char **argv)
 {
     argparse::ArgumentParser program("client");
     program.add_argument("--server_address")
         .required()
-        .help("Config file path");
+        .help("DB server address");
 
     try {
         program.parse_args( argc, argv );
@@ -23,38 +28,23 @@ int main(int argc, char **argv)
     }
 
     // parse arguments
-    auto server_addr = program.get<std::string>("--server_address");
+    auto serverAddr = program.get<std::string>("--server_address");
 
-    OhMyDBClient client(grpc::CreateChannel(server_addr, grpc::InsecureChannelCredentials()));
+    auto repDB = ohmydb::ReplicatedDB( serverAddr );
 
-    client.Ping(1);
-
-    std::string value;
-    std::cout << "Get : Hello...\n";
-    if (client.Get("Hello", value) < 0)
-    {
-        std::cout << "Get failed! Key maybe not present.\n";
-    }
-    else
-    {
-        std::cout << "Returned : " << value << "\n";
-    }
-
-    std::cout << "Put : Hello...\n";
-    if (client.Put("Hello", "World") < 0)
-    {
-        std::cout << "Put failed!\n";
-    }
-
-    std::cout << "Get : Hello...\n";
-    if (client.Get("Hello", value) < 0)
-    {
-        std::cout << "Get failed! Key maybe not present.\n";
-    }
-    else
-    {
-        std::cout << "Returned : " << value << "\n";
-    }
-
+    // for test only
+    auto printOpt = []( auto&& tag, auto&& opt ) {
+      if ( opt.has_value() ) {
+        std::cout << tag << " = " << opt.value() << std::endl;
+      } else {
+        std::cout << tag << " = NOT_FOUND" << std::endl;
+      }
+    };
+    auto val = repDB.get( 789 );
+    printOpt( "first_attempt", val );
+    repDB.put( std::make_pair( 789, 10987654 ) );
+    auto valAgain = repDB.get( 789 );
+    printOpt( "second_attempt", valAgain );
+    
     return 0;
 }

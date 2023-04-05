@@ -4,6 +4,8 @@
 #include "OhMyConfig.H"
 #include "OhMyRaft.H"
 #include "RaftService.H"
+#include "DatabaseService.H"
+#include "DatabaseUtils.H"
 #include "ohmydb/LevelDBProxy.H"
 
 class ReplicaManager {
@@ -17,12 +19,12 @@ public:
   // and connect to peers as well. waitForPeers makes the replica ping each
   // peer before starting operation. This should be used for testing only!
   void initialiseServices(
-      std::vector<ServerInfo> servers, int id, bool waitForPeers, std::string db_path ); 
+      std::vector<ServerInfo> servers, int id, bool waitForPeers, std::string dbPath ); 
 
   // These methods are accessed by the Database RPC server layer. But exposing
   // them as public methods here allows for quick testing :D
-  std::optional<int> get( int key );
-  bool put( std::pair<int, int> kvp );
+  ohmydb::Ret get( int key );
+  ohmydb::Ret put( std::pair<int, int> kvp );
 
   // Similarly providing handle for AppendEntries and RequestVote here. These
   // are called from the Raft RPC interface during normal operation. These should
@@ -40,30 +42,35 @@ private:
   ReplicaManager() {}
   raft::RaftManager<RaftClient> raft_;
   
-  grpc::ServerBuilder builder_;
+  grpc::ServerBuilder raftBuilder_;
   RaftService raftService_;
-  
   std::thread raftServer_;
 
+  grpc::ServerBuilder dbBuilder_;
+  OhMyDBService dbService_;
+  std::thread dbServer_;
+
+  std::vector<ServerInfo> servers_;
 };
 
 inline void ReplicaManager::initialiseServices(
-    std::vector<ServerInfo> servers, int id, bool waitForPeers, std::string db_path)
+    std::vector<ServerInfo> servers, int id, bool waitForPeers, std::string dbPath )
 {
-  auto raftPort = servers[id].port;
-  auto raftIp = servers[id].ip;
+  servers_ = servers;
+  auto raftPort = servers_[id].raft_port;
+  auto raftIp = servers_[id].ip;
 
-  raft::LevelDB<int,int>::Instance().initialize(db_path);
+  raft::LevelDB<int,int>::Instance().initialize(dbPath);
 
   grpc::EnableDefaultHealthCheckService(true);
   grpc::reflection::InitProtoReflectionServerBuilderPlugin();
 
   // start raft server
   std::string raftServerAddr(raftIp + ":" + std::to_string(raftPort));
-  builder_.AddListeningPort(raftServerAddr, grpc::InsecureServerCredentials());
-  builder_.RegisterService(&raftService_);
+  raftBuilder_.AddListeningPort(raftServerAddr, grpc::InsecureServerCredentials());
+  raftBuilder_.RegisterService(&raftService_);
   raftServer_ = std::thread([this]{ 
-    std::unique_ptr<grpc::Server> raftServer(builder_.BuildAndStart());   
+    std::unique_ptr<grpc::Server> raftServer(raftBuilder_.BuildAndStart());   
     raftServer->Wait(); 
   });
   raftServer_.detach();
@@ -71,11 +78,11 @@ inline void ReplicaManager::initialiseServices(
   std::map<int32_t, std::unique_ptr<RaftClient>> peers;
   
   // construct RPC clients for all peers (excluding the replica we are at)
-  for ( size_t i = 0; i < servers.size(); ++i ) {
+  for ( size_t i = 0; i < servers_.size(); ++i ) {
     if ( (int)i == id ) {
       continue;
     }
-    auto address = servers[i].ip + ":" + std::to_string(servers[i].port); 
+    auto address = servers_[i].ip + ":" + std::to_string(servers_[i].raft_port); 
     peers[i] = std::make_unique<RaftClient>(grpc::CreateChannel(
         address, grpc::InsecureChannelCredentials())); 
   }
@@ -90,7 +97,7 @@ inline void ReplicaManager::initialiseServices(
         ++activePeers;
       }
     }
-    if ( !waitForPeers || ( activePeers * 2 > servers.size() ) ) {
+    if ( !waitForPeers || ( activePeers * 2 > servers_.size() ) ) {
       break;
     }
     std::this_thread::sleep_for( std::chrono::seconds( 1 ) );
@@ -98,6 +105,18 @@ inline void ReplicaManager::initialiseServices(
 
   raft_.initialiseConnections( id, std::move(peers) );
   LogInfo( "Services Started: Raft Initialised" );
+
+  // start Database RPC server
+  auto dbIp = servers_[id].ip;
+  auto dbPort = servers_[id].db_port;
+  std::string dbServerAddr(dbIp + ":" + std::to_string(dbPort));
+  dbBuilder_.AddListeningPort(dbServerAddr, grpc::InsecureServerCredentials());
+  dbBuilder_.RegisterService(&dbService_);
+  dbServer_ = std::thread([this]{ 
+    std::unique_ptr<grpc::Server> dbServer(dbBuilder_.BuildAndStart());   
+    dbServer->Wait(); 
+  });
+  dbServer_.detach();
 }
 
 inline void ReplicaManager::start()
@@ -115,7 +134,7 @@ inline ReplicaManager::~ReplicaManager()
   stop();
 }
 
-inline std::optional<int> ReplicaManager::get( int key )
+inline ohmydb::Ret ReplicaManager::get( int key )
 {
   std::promise<raft::RaftOp::res_t> pr;
   auto ft = pr.get_future();
@@ -127,16 +146,23 @@ inline std::optional<int> ReplicaManager::get( int key )
     .promiseHandle = { it }
   };
 
-  auto isSubmitted = raft_.submit( op );
+  auto [ isSubmitted, leaderId ] = raft_.submit( op );
   if ( ! isSubmitted ) {
     raft::PromiseStore<raft::RaftOp::res_t>::Instance()
      .getAndRemove( it );
-    return {}; 
+    std::string leaderAddr = servers_[leaderId].ip + ":" + std::to_string(servers_[leaderId].db_port);
+    return { ohmydb::ErrorCode::NOT_LEADER, leaderAddr, -1 };
   }
-  return std::get<std::optional<int>>( ft.get() );
+
+  auto val = std::get<std::optional<int>>( ft.get() );
+  if ( !val.has_value() ) {
+    return { ohmydb::ErrorCode::KEY_NOT_FOUND, "", -1 };
+  } 
+
+  return { ohmydb::ErrorCode::OK, "", val.value() };
 }
 
-inline bool ReplicaManager::put( std::pair<int, int> kvp )
+inline ohmydb::Ret ReplicaManager::put( std::pair<int, int> kvp )
 {
   std::promise<raft::RaftOp::res_t> pr;  
   auto ft = pr.get_future();
@@ -149,13 +175,21 @@ inline bool ReplicaManager::put( std::pair<int, int> kvp )
     .promiseHandle = { it }
   };
 
-  bool isSubmitted = raft_.submit( op );
+  auto [ isSubmitted, leaderId ] = raft_.submit( op );
+
+  // we couldn't submit the job, this usually means we are not the leader
   if ( ! isSubmitted ) {
     raft::PromiseStore<raft::RaftOp::res_t>::Instance()
       .getAndRemove( it );
-    return false;
+    std::string leaderAddr = servers_[leaderId].ip + ":" + std::to_string(servers_[leaderId].db_port);
+    return { ohmydb::ErrorCode::NOT_LEADER, leaderAddr, 0 };
   }
-  return std::get<bool>( ft.get() );
+
+  // all went well and job is submitted -> must block for execution
+  return {
+    ohmydb::ErrorCode::OK, "",
+    static_cast<int32_t>( std::get<bool>( ft.get() ) ) 
+  };
 }
 
 inline raft::AppendEntriesRet ReplicaManager::AppendEntries( raft::AppendEntriesParams args )
