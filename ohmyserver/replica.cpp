@@ -97,6 +97,5 @@ int main(int argc, char **argv)
     LogInfo( "Received Output: " + std::to_string( ReplicaManager::Instance().get(1).value ) );
   // -- 
 
-  //Busy loop, handles election timeouts
   while( 1 ) { std::this_thread::sleep_for(std::chrono::seconds(5)); }
 }
