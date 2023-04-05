@@ -1,3 +1,7 @@
 build/
 __pycache__/
 settings.json
+config.csv
+tmux_script.sh
+manifest.xml
+oh-my-db.tar.gz

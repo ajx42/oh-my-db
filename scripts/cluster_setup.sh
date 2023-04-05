@@ -1,5 +1,5 @@
 #!/bin/bash
-BRANCH="tc_cloudlab_setup"
+BRANCH="hc_testing"
 
 setup () 
 {
