@@ -29,6 +29,7 @@ void writeTest(ohmydb::ReplicatedDB &repDB, size_t numPairs, size_t iter)
 
     double avgLatency = duration / iter;
 
+    std::cout << "========================\n";
     std::cout << "Write Test Results:\n";
     std::cout << "Operations: " << iter << "\n";
     std::cout << "Elapsed Time: " << seconds << " s\n";
@@ -51,6 +52,7 @@ void readTest(ohmydb::ReplicatedDB &repDB, size_t numPairs, size_t iter)
 
     double avgLatency = duration / iter;
 
+    std::cout << "========================\n";
     std::cout << "Read Test Results:\n";
     std::cout << "Operations: " << iter << "\n";
     std::cout << "Elapsed Time: " << seconds << " s\n";
@@ -81,6 +83,7 @@ void readWriteTest(ohmydb::ReplicatedDB &repDB, size_t numPairs, size_t iter)
     double avgLatency = duration / iter;
 
     // Print the time taken in seconds.milliseconds
+    std::cout << "========================\n";
     std::cout << "Read/Write Test Results:\n";
     std::cout << "Operations: " << iter << "\n";
     std::cout << "Elapsed Time: " << seconds << " s\n";

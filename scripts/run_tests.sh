@@ -1,17 +1,14 @@
 set -x
 
-start_replica()
+start_test()
 {
     SSH_HOST=$1
-    id=$2
+    iters=$2
+    numPair=$3
 
     ssh ${SSH_HOST} << EOF
-    killall replica
-    rm -rf /tmp/db
-    ./oh-my-db/build/ohmyserver/replica --config ./config.csv --id $2 --db_path /tmp/db
+    ./oh-my-db/build/ohmyserver/client --config ./config.csv --iter $2 --numkeys $3
 EOF
-
-
 }
 
 parse_ssh_hosts()
@@ -34,21 +31,17 @@ parse_ssh_hosts()
 # here assuming the 4-th column is the hostname, and 5-th column is the username
 SSH_HOSTS=($(parse_ssh_hosts config.sh \$5\"@\"\$4))
 
-# Get the length of the array
-size=${#SSH_HOSTS[@]}
+## Get the length of the array
+#size=${#SSH_HOSTS[@]}
+#
+##for SSH_HOST in "${SSH_HOSTS[@]}"
+#for ((i=0; i<$size; i++)); do
+#
+#
+SSH_HOST=${SSH_HOSTS[0]}
 
-#for SSH_HOST in "${SSH_HOSTS[@]}"
-for ((i=0; i<$size; i++)); do
+start_test ${SSH_HOST} 6 50
 
-SSH_HOST=${SSH_HOSTS[$i]}
-
-start_replica ${SSH_HOST} $i &
-
-done
+#done
 
 wait
-
-
-#echo ${SSH_HOSTS[@]}
-#echo ${raft_port[@]}
-#echo ${db_port[@]}
