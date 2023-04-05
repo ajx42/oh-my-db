@@ -5,6 +5,7 @@
 #include <memory>
 #include <argparse/argparse.hpp>
 
+#include "OhMyConfig.H"
 #include "DatabaseClient.H"
 #include "DatabaseUtils.H"
 #include "WowLogger.H"
@@ -74,12 +75,34 @@ void put(std::unique_ptr<OhMyDBClient>& client, int key, int value) {
              "): Success " );
 }
 
+void writeTest(std::string server_addr, size_t iter)
+{
+    // create pointer to a OhMyDBClient object
+    std::unique_ptr<OhMyDBClient> client = std::make_unique<OhMyDBClient>(
+        grpc::CreateChannel(server_addr, grpc::InsecureChannelCredentials())
+    );
+
+    for(size_t i = 0; i < iter; i++)
+    {
+        put(client, i, i);
+    }
+
+}
+
 int main(int argc, char **argv)
 {
     argparse::ArgumentParser program("client");
-    program.add_argument("--server_address")
+    program.add_argument("--config")
         .required()
-        .help("DB server address");
+        .help("Config file.");
+
+    program.add_argument("--iter")
+        .default_value("3")
+        .help("Log2 of iterations to execute.");
+
+    program.add_argument("--id")
+        .default_value("0")
+        .help("Initial node to contact.");
 
     try {
         program.parse_args( argc, argv );
@@ -90,20 +113,26 @@ int main(int argc, char **argv)
         std::exit(1);
     }
 
-    // parse arguments
-    auto server_addr = program.get<std::string>("--server_address");
 
+    auto config_path = program.get<std::string>("--config");
+    auto id = std::stoi(program.get<std::string>("--id"));
+    auto iter = std::stoi(program.get<std::string>("--iter"));
+
+    // parse arguments
+    auto servers = ParseConfig(config_path);
+    auto server_addr = servers[id].ip + ":" + std::to_string(servers[id].db_port);
+
+    LogInfo("Client: Starting contact on " + server_addr);
+
+
+    writeTest(server_addr, 1lu<<iter);
     // OhMyDBClient client(server_addr);
-    // create pointer to a OhMyDBClient object
-    std::unique_ptr<OhMyDBClient> client = std::make_unique<OhMyDBClient>(
-        grpc::CreateChannel(server_addr, grpc::InsecureChannelCredentials())
-    );
     
 
     // /* for test only*/
-    get(client, 1);
-    put(client, 1, 2);
-    get(client, 1);
+    //get(client, 1);
+    //put(client, 1, 2);
+    //get(client, 1);
 
     return 0;
 }
