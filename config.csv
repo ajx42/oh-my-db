@@ -1,4 +1,0 @@
-name,intf_ip,host_ip,hostname,username,raft_port,db_port
-node0,10.10.1.1,127.0.0.1,c220g2-010832.wisc.cloudlab.us,tauchang,8080,12345
-node1,10.10.1.1,127.0.0.1,c220g2-010830.wisc.cloudlab.us,tauchang,8081,12346
-node2,10.10.1.1,127.0.0.1,c220g2-010830.wisc.cloudlab.us,tauchang,8082,12347
