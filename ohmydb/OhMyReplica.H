@@ -19,7 +19,7 @@ public:
   // and connect to peers as well. waitForPeers makes the replica ping each
   // peer before starting operation. This should be used for testing only!
   void initialiseServices(
-      std::vector<ServerInfo>& servers, int id, bool waitForPeers, std::string dbPath ); 
+      std::vector<ServerInfo> servers, int id, bool waitForPeers, std::string dbPath ); 
 
   // These methods are accessed by the Database RPC server layer. But exposing
   // them as public methods here allows for quick testing :D
@@ -54,7 +54,7 @@ private:
 };
 
 inline void ReplicaManager::initialiseServices(
-    std::vector<ServerInfo>& servers, int id, bool waitForPeers, std::string dbPath )
+    std::vector<ServerInfo> servers, int id, bool waitForPeers, std::string dbPath )
 {
   servers_ = servers;
   auto raftPort = servers_[id].raft_port;
@@ -176,14 +176,20 @@ inline ohmydb::Ret ReplicaManager::put( std::pair<int, int> kvp )
   };
 
   auto [ isSubmitted, leaderId ] = raft_.submit( op );
+
+  // we couldn't submit the job, this usually means we are not the leader
   if ( ! isSubmitted ) {
     raft::PromiseStore<raft::RaftOp::res_t>::Instance()
       .getAndRemove( it );
     std::string leaderAddr = servers_[leaderId].ip + ":" + std::to_string(servers_[leaderId].db_port);
-    return { ohmydb::ErrorCode::NOT_LEADER, leaderAddr, -1 };
+    return { ohmydb::ErrorCode::NOT_LEADER, leaderAddr, 0 };
   }
 
-  return { ohmydb::ErrorCode::OK, "", -1 };
+  // all went well and job is submitted -> must block for execution
+  return {
+    ohmydb::ErrorCode::OK, "",
+    static_cast<int32_t>( std::get<bool>( ft.get() ) ) 
+  };
 }
 
 inline raft::AppendEntriesRet ReplicaManager::AppendEntries( raft::AppendEntriesParams args )
