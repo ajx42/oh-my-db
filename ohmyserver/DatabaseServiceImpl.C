@@ -1,7 +1,7 @@
 #include "DatabaseService.H"
 #include "OhMyReplica.H"
 
-inline grpc::Status OhMyDBService::TestCall(
+grpc::Status OhMyDBService::TestCall(
     grpc::ServerContext *, const ohmydb::Cmd *cmd, ohmydb::Ack *ack)
 {
     std::cout << "Client has made contact... " << std::endl;
@@ -9,7 +9,7 @@ inline grpc::Status OhMyDBService::TestCall(
     return grpc::Status::OK;
 }
 
-inline grpc::Status OhMyDBService::Put(
+grpc::Status OhMyDBService::Put(
     grpc::ServerContext *, const ohmydb::PutRequest *request, ohmydb::PutResponse *response)
 {
     int key = request->key();
@@ -21,7 +21,7 @@ inline grpc::Status OhMyDBService::Put(
     return grpc::Status::OK;
 }
 
-inline grpc::Status OhMyDBService::Get(
+grpc::Status OhMyDBService::Get(
     grpc::ServerContext *, const ohmydb::GetRequest *request, ohmydb::GetResponse *response)
 {
     int key = request->key();
