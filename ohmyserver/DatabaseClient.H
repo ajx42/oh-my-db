@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DatabaseUtils.H"
+#include "WowLogger.H"
 
 #include <optional>
 
@@ -32,20 +33,16 @@ inline int32_t OhMyDBClient::Ping(int32_t cmd)
     grpc::ClientContext context;
 
     auto status = stub_->TestCall(&context, msg, &reply);
-    if (status.ok())
-    {
-        std::cerr << "Received OK" << std::endl;
+    if ( status.ok() ) {
+        LogInfo( "Received OK on Ping" );
         return reply.ok();
-    }
-    else
-    {
-        std::cerr << "RPC Failed" << std::endl;
+    } else {
+        LogWarn( "Ping RPC Failed" );
         return -1;
     }
 }
 
-inline std::optional<ohmydb::Ret> 
-OhMyDBClient::Put(int key, int value)
+inline std::optional<ohmydb::Ret> OhMyDBClient::Put(int key, int value)
 {
     ohmydb::PutRequest request;
     request.set_key(key);
@@ -55,19 +52,19 @@ OhMyDBClient::Put(int key, int value)
     grpc::ClientContext context;
 
     auto status = stub_->Put(&context, request, &response);
-    if (status.ok())
-    {
-        return {{ static_cast<ohmydb::ErrorCode>(response.error_code()), response.leader_addr(), -1 }};
+    if ( status.ok() ) {
+      return ohmydb::Ret { 
+        static_cast<ohmydb::ErrorCode>(response.error_code()),
+        response.leader_addr(), -1
+      };
     }
-    else
-    {
-        std::cerr << "Put: RPC Failed" << std::endl;
-        return {};
+    else {
+      LogError("Put: RPC Failed");
+      return {};
     }
 }
 
-inline std::optional<ohmydb::Ret>
-OhMyDBClient::Get(int key)
+inline std::optional<ohmydb::Ret> OhMyDBClient::Get(int key)
 {
     ohmydb::GetRequest request;
     request.set_key(key);
@@ -76,13 +73,14 @@ OhMyDBClient::Get(int key)
     grpc::ClientContext context;
 
     auto status = stub_->Get(&context, request, &response);
-    if (status.ok())
-    {
-        return {{ static_cast<ohmydb::ErrorCode>(response.error_code()), response.leader_addr(), response.value() }};
-    }
-    else
-    {
-        std::cerr << "Get: RPC Failed" << std::endl;
+    if ( status.ok() ) {
+        return ohmydb::Ret {
+          static_cast<ohmydb::ErrorCode>(response.error_code()),
+          response.leader_addr(), response.value()
+        };
+    } else {
+        LogError("Get: RPC Failed");
         return {};
     }
 }
+
