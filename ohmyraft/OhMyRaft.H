@@ -172,8 +172,11 @@ void RaftManager<T>::runLeaderOneIter()
   }
   state_.Mut.unlock();
 
+
+  std::vector<std::thread*> threadHandles;
+
   for ( auto& [id, peer] : peers_ ) {
-    auto th = std::thread([id = id, this, savedCurrentTerm]{
+    auto th = new std::thread([id = id, this, savedCurrentTerm]{
       AppendEntriesParams args;
 
       state_.Mut.lock();
@@ -255,7 +258,12 @@ void RaftManager<T>::runLeaderOneIter()
         }
       }
     });
-    th.detach();
+    threadHandles.push_back(th);
+  }
+
+  for ( auto& th : threadHandles) {
+      th->join();
+      delete th;
   }
 }
 
@@ -279,7 +287,7 @@ void RaftManager<T>::raftImpl()
     }
 
     // sleep for a while
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    //std::this_thread::sleep_for(std::chrono::milliseconds(50));
    
     // prepare to receive more
     raftIn_.clear();
