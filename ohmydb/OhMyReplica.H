@@ -90,7 +90,7 @@ inline void ReplicaManager::initialiseServices(
   LogInfo( "Waiting for a majority of peers to be up..." )
   // keep pinging until a majority of peers are up
   while ( true ) {
-    auto activePeers = 1; // myself
+    size_t activePeers = 1; // myself
     for ( auto& [i, peer]: peers ) {
       if ( peer->Ping(1) > 0 ) {
         LogInfo( "ping OK: " + std::to_string(i) );
