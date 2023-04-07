@@ -19,7 +19,7 @@ public:
   // and connect to peers as well. waitForPeers makes the replica ping each
   // peer before starting operation. This should be used for testing only!
   void initialiseServices(
-      std::vector<ServerInfo> servers, int id, bool waitForPeers,
+      std::map<int32_t, ServerInfo> clusterConfig, int id, bool waitForPeers,
       std::string dbPath, bool enableBootstrap, std::string storeDir );
 
   // These methods are accessed by the Database RPC server layer. But exposing
@@ -50,19 +50,24 @@ private:
   grpc::ServerBuilder dbBuilder_;
   OhMyDBService dbService_;
   std::thread dbServer_;
-
-  std::vector<ServerInfo> servers_;
 };
 
 inline void ReplicaManager::initialiseServices(
-    std::vector<ServerInfo> servers, int id, bool waitForPeers,
+    std::map<int32_t, ServerInfo> clusterConfig, int id, bool waitForPeers,
     std::string dbPath, bool enableBootstrap, std::string storeDir )
 {
   raft_.bootstrap( id, enableBootstrap, storeDir );
 
-  servers_ = servers;
-  auto raftPort = servers_[id].raft_port;
-  auto raftIp = servers_[id].ip;
+  // @TODO: If we are bootstrapping, we should read server info from log
+  // so there is no need to pass serverInfo here. But for debuggin purpose,
+  // it's still ideal to enable bootstrapping with server info.
+  if ( !enableBootstrap ) {
+    raft_.setClusterConfig( clusterConfig );
+  }
+
+  clusterConfig = raft_.getClusterConfig();
+  auto raftPort = clusterConfig[id].raft_port;
+  auto raftIp = clusterConfig[id].ip;
 
   raft::LevelDB<int,int>::Instance().initialize(dbPath);
 
@@ -82,11 +87,11 @@ inline void ReplicaManager::initialiseServices(
   std::map<int32_t, std::unique_ptr<RaftClient>> peers;
   
   // construct RPC clients for all peers (excluding the replica we are at)
-  for ( size_t i = 0; i < servers_.size(); ++i ) {
+  for ( auto const& [i, serverConfig]: clusterConfig  ) {
     if ( (int)i == id ) {
       continue;
     }
-    auto address = servers_[i].ip + ":" + std::to_string(servers_[i].raft_port); 
+    auto address = serverConfig.ip + ":" + std::to_string(serverConfig.raft_port); 
     peers[i] = std::make_unique<RaftClient>(grpc::CreateChannel(
         address, grpc::InsecureChannelCredentials())); 
   }
@@ -100,18 +105,21 @@ inline void ReplicaManager::initialiseServices(
         ++activePeers;
       }
     }
-    if ( !waitForPeers || ( activePeers * 2 > servers_.size() ) ) {
+    if ( !waitForPeers || ( activePeers * 2 > clusterConfig.size() ) ) {
       break;
     }
     std::this_thread::sleep_for( std::chrono::seconds( 1 ) );
   }
 
-  raft_.initialiseConnections( std::move(peers) );
+  for ( auto& [i, peer]: peers ) {
+    raft_.addPeer( i, std::move( peer ) );
+  }
+
   LogInfo( "Services Started: Raft Initialised" );
 
   // start Database RPC server
-  auto dbIp = servers_[id].ip;
-  auto dbPort = servers_[id].db_port;
+  auto dbIp = clusterConfig[id].ip;
+  auto dbPort = clusterConfig[id].db_port;
   std::string dbServerAddr(dbIp + ":" + std::to_string(dbPort));
   dbBuilder_.AddListeningPort(dbServerAddr, grpc::InsecureServerCredentials());
   dbBuilder_.RegisterService(&dbService_);
@@ -153,8 +161,7 @@ inline ohmydb::Ret ReplicaManager::get( int key )
   if ( ! isSubmitted ) {
     raft::PromiseStore<raft::RaftOp::res_t>::Instance()
      .getAndRemove( it );
-    std::string leaderAddr = servers_[leaderId].ip + ":" +
-                             std::to_string(servers_[leaderId].db_port);
+    std::string leaderAddr = raft_.getLastKnownLeaderAddr();
     return { ohmydb::ErrorCode::NOT_LEADER, leaderAddr, -1 };
   }
 
@@ -185,7 +192,7 @@ inline ohmydb::Ret ReplicaManager::put( std::pair<int, int> kvp )
   if ( ! isSubmitted ) {
     raft::PromiseStore<raft::RaftOp::res_t>::Instance()
       .getAndRemove( it );
-    std::string leaderAddr = servers_[leaderId].ip + ":" + std::to_string(servers_[leaderId].db_port);
+    std::string leaderAddr = raft_.getLastKnownLeaderAddr();
     return { ohmydb::ErrorCode::NOT_LEADER, leaderAddr, 0 };
   }
 

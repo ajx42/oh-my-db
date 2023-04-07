@@ -17,6 +17,7 @@
 #include "WowLogger.H"
 #include "PersistentVector.H"
 #include "PersistentStore.H"
+#include "OhMyConfig.H"
 
 namespace raft {
 
@@ -44,6 +45,7 @@ struct RaftState
   int32_t CommitIndex; // 
   int32_t LastApplied; // I am not sure why this is not persistent
   int32_t LastKnownLeaderId;
+  std::map<int32_t, ServerInfo> ClusterConfig; // membership
   
   // for leaders only peer id -> next/match index
   std::map<int32_t, int32_t> NextIndex;
@@ -81,7 +83,11 @@ public:
 
   ~RaftManager();
 
-  void initialiseConnections( std::map<int32_t, std::unique_ptr<ClientT>>&& peers );
+  void setClusterConfig( std::map<int32_t, ServerInfo> config );
+  std::map<int32_t, ServerInfo> getClusterConfig();
+  void addPeer( int32_t peerId, std::unique_ptr<ClientT>&& rpcclient );
+  void removePeer( int32_t peerId );
+  std::string getLastKnownLeaderAddr();
 
   // control points
   void start();
@@ -142,16 +148,44 @@ private:
   void startElection();
 };
 
-// no need for locking state, this is to be called before start is called
 template <class T>
-void RaftManager<T>::initialiseConnections(
-    std::map<int32_t, std::unique_ptr<T>>&& peers )
+void RaftManager<T>::addPeer( int32_t peerId, std::unique_ptr<T>&& rpcClient )
 {
-  peers_ = std::move(peers);
-  for ( auto& [id, _]: peers_ ) {
-    state_.NextIndex[id] = 0;
-    state_.MatchIndex[id] = -1;
-  }
+  std::unique_lock stateLock { state_.Mut };
+  state_.NextIndex[peerId] = 0;
+  state_.MatchIndex[peerId] = -1;
+  peers_[peerId] = std::move(rpcClient);
+}
+
+template <class T>
+void RaftManager<T>::removePeer( int32_t peerId )
+{
+  std::unique_lock stateLock { state_.Mut };
+  state_.ClusterConfig.erase( peerId );
+  state_.NextIndex.erase( peerId );
+  state_.MatchIndex.erase( peerId );
+  peers_.erase( peerId );
+}
+
+template <class T>
+void RaftManager<T>::setClusterConfig( std::map<int32_t, ServerInfo> config )
+{
+  std::unique_lock stateLock { state_.Mut };
+  state_.ClusterConfig = config;
+}
+
+template <class T>
+std::map<int32_t, ServerInfo> RaftManager<T>::getClusterConfig()
+{
+  return state_.ClusterConfig;
+}
+
+template <class T>
+std::string RaftManager<T>::getLastKnownLeaderAddr()
+{
+  std::unique_lock stateLock { state_.Mut };
+  return  state_.ClusterConfig[state_.LastKnownLeaderId].ip + ":" +
+          std::to_string(state_.ClusterConfig[state_.LastKnownLeaderId].db_port);
 }
 
 template <class T>
@@ -354,6 +388,7 @@ void RaftManager<T>::bootstrap( int32_t myId, bool withBootstrap, std::string st
 
   state_.pStore.setup( storeFilePrefix );
   
+  // @TODO: Deal with ClusterConfig
   if ( withBootstrap ) {
     state_.VotedFor = state_.pStore.load( "VotedFor", -1 );
     state_.CurrentTerm = state_.pStore.load( "CurrentTerm", 0 );

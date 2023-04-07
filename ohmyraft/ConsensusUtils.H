@@ -23,7 +23,7 @@ struct Operation {
   using arg_t = std::variant<getarg_t, putarg_t>;
   using res_t = std::variant<getres_t, putres_t>;
   
-  enum OpType : int32_t { GET = 0, PUT = 1 };
+  enum OpType : int32_t { GET = 0, PUT = 1, NOOP = 2 };
 
   OpType kind;
   arg_t args;
@@ -42,10 +42,13 @@ struct Operation {
     if ( kind == GET ) {
       res = LevelDB<KeyT, ValT>::Instance().get(
               std::get<getarg_t>( args ) );
-    } else {
+    } else if ( kind == PUT ) {
       res = LevelDB<KeyT, ValT>::Instance().put(
               std::get<putarg_t>( args ) );
+    } else {
+      res = true;
     }
+
     if ( promiseHandle.has_value() ) {
       // we have a promise to fulfill
       auto promise = PromiseStore<res_t>::Instance().getAndRemove(
@@ -64,8 +67,10 @@ struct Operation {
         promiseHandle.value() );
     if ( kind == GET ) {
       promise.set_value({}); // get failed
-    } else {
+    } else if ( kind == PUT ) {
       promise.set_value( false ); // put failed
+    } else { // NOOP failed
+      promise.set_value( false );
     }
     promiseHandle.reset();
   }
@@ -75,9 +80,11 @@ struct Operation {
     oss << "Operation[ ";
     if ( kind == GET ) {
       oss << "GET(" << std::get<getarg_t>( args ) << ") ";
-    } else {
+    } else if ( kind == PUT ) {
       auto putarg = std::get<putarg_t>( args );
       oss << "PUT(" << putarg.first << ", " << putarg.second << ") ";
+    } else {
+      oss << "NOOP ";
     }
     oss << "HasPromise=" << promiseHandle.has_value() << " ]";
     return oss.str();

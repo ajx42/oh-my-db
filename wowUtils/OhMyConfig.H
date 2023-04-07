@@ -54,7 +54,7 @@ inline TokenizedOut TokenizeCSV( std::string filename )
 
 inline std::vector<ServerInfo> ParseConfig(std::string filename)
 {
-    std::vector<ServerInfo> servers;
+    std::map<int32_t, ServerInfo> servers;
     std::ifstream file(filename);
     std::string line;
     // parse header
@@ -69,6 +69,7 @@ inline std::vector<ServerInfo> ParseConfig(std::string filename)
     }
 
     // parse each node
+    int id = 0;
     while (std::getline(file, line))
     {
         // check if line is empty
@@ -85,7 +86,8 @@ inline std::vector<ServerInfo> ParseConfig(std::string filename)
         server.ip = tokens[header["intf_ip"]];
         server.raft_port = stoi(tokens[header["raft_port"]]);
         server.db_port = stoi(tokens[header["db_port"]]);
-        servers.push_back(server);
+        servers[id] = server;
+        id++;
     }
     return servers;
 }
