@@ -1,5 +1,6 @@
 #pragma once
 
+<<<<<<< HEAD
 #include <string>
 #include <functional>
 #include <vector>
@@ -18,6 +19,10 @@ namespace raft {
 //        <fileBaseName><key>.persist 
 // OhMyRaft uses the following format:
 //        <path/to/storeDir>/raft.<replica_id>.<key>.persist
+=======
+namespace raft {
+
+>>>>>>> 005516a (first cut persistence impl)
 class PersistentStore {
 public:
   PersistentStore() {};
@@ -26,8 +31,11 @@ public:
   void store( std::string key, int32_t val );
   int32_t load( std::string key, int32_t defaultVal );
   std::string getFilename( std::string key );
+<<<<<<< HEAD
   
   static std::optional<int32_t> loadInt( std::string filename );
+=======
+>>>>>>> 005516a (first cut persistence impl)
 
 private:
   std::string fileBaseName_; 

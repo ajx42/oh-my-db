@@ -65,10 +65,13 @@ int main(int argc, char **argv)
       .default_value( false )
       .implicit_value( true );
 
+<<<<<<< HEAD
   program.add_argument("--storedir")
       .help("directory to store persistent raft state in")
       .default_value("/tmp/");
 
+=======
+>>>>>>> 005516a (first cut persistence impl)
   try {
       program.parse_args( argc, argv );
   }
@@ -98,10 +101,16 @@ int main(int argc, char **argv)
   auto selfDetails = servers[id];
   printServer("ServerDetails", id);
 
+<<<<<<< HEAD
   ReplicaManager::Instance().initialiseServices(
       servers, id, true, db_path, enableBootstrap, store_dir );  
   
   // start up the replica
+=======
+  auto enableBootstrap = program["--bootstrap"] == true;
+
+  ReplicaManager::Instance().initialiseServices( servers, id, true, db_path, enableBootstrap );  
+>>>>>>> 005516a (first cut persistence impl)
   ReplicaManager::Instance().start();
 
   std::this_thread::sleep_for(std::chrono::seconds(5));
