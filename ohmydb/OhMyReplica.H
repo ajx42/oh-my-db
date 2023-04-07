@@ -20,11 +20,7 @@ public:
   // peer before starting operation. This should be used for testing only!
   void initialiseServices(
       std::vector<ServerInfo> servers, int id, bool waitForPeers,
-<<<<<<< HEAD
       std::string dbPath, bool enableBootstrap, std::string storeDir );
-=======
-      std::string dbPath, bool enableBootstrap ); 
->>>>>>> 005516a (first cut persistence impl)
 
   // These methods are accessed by the Database RPC server layer. But exposing
   // them as public methods here allows for quick testing :D
@@ -60,15 +56,9 @@ private:
 
 inline void ReplicaManager::initialiseServices(
     std::vector<ServerInfo> servers, int id, bool waitForPeers,
-<<<<<<< HEAD
     std::string dbPath, bool enableBootstrap, std::string storeDir )
 {
   raft_.bootstrap( id, enableBootstrap, storeDir );
-=======
-    std::string dbPath, bool enableBootstrap )
-{
-  raft_.bootstrap( id, enableBootstrap );
->>>>>>> 005516a (first cut persistence impl)
 
   servers_ = servers;
   auto raftPort = servers_[id].raft_port;
