@@ -8,7 +8,9 @@ deploy_to_replica()
     scp $file ${SSH_HOST}:~/oh-my-db/$file
     ssh ${SSH_HOST} << EOF
     cd oh-my-db/build
-    make -j 16
+    cmake ../ -DCMAKE_INSTALL_PREFIX=.
+    cmake --build . --parallel 16
+    exit
 EOF
 }
 

@@ -5,9 +5,10 @@ start_test()
     SSH_HOST=$1
     iters=$2
     numPair=$3
+    id=$4
 
     ssh ${SSH_HOST} << EOF
-    ./oh-my-db/build/ohmyserver/client --config ./config.csv --iter $2 --numkeys $3
+    ./oh-my-db/build/ohmyserver/client --config ./config.csv --iter $2 --numkeys $3 --id $4
 EOF
 }
 
@@ -27,7 +28,7 @@ parse_ssh_hosts()
     echo ${arr[@]}
 }
 
-./scripts/startup_cluster_db.sh &
+#./scripts/startup_cluster_db.sh &
 ./scripts/monitor/deploy_monitor.sh &
 
 sleep 5
@@ -36,15 +37,11 @@ sleep 5
 SSH_HOSTS=($(parse_ssh_hosts config.sh \$5\"@\"\$4))
 
 ## Get the length of the array
-#size=${#SSH_HOSTS[@]}
-#
-##for SSH_HOST in "${SSH_HOSTS[@]}"
-#for ((i=0; i<$size; i++)); do
-#
-#
-SSH_HOST=${SSH_HOSTS[0]}
-start_test ${SSH_HOST} 20 50
+size=${#SSH_HOSTS[@]}
 
-#done
+for ((i=0; i<$size; i++)); do
+    SSH_HOST=${SSH_HOSTS[i]}
+    start_test ${SSH_HOST} 20 50 $i &
+done
 
 wait
