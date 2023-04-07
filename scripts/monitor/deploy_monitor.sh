@@ -1,17 +1,15 @@
 set -x
 
-start_replica()
+start_monitor()
 {
     SSH_HOST=$1
-    id=$2
+    iters=$2
+    numPair=$3
 
     ssh ${SSH_HOST} << EOF
-    killall monitor.sh
-    killall replica
-    rm -rf /tmp/db
+    cd oh-my-db
+    ./scripts/monitor/monitor.sh
 EOF
-
-
 }
 
 parse_ssh_hosts()
@@ -30,19 +28,31 @@ parse_ssh_hosts()
     echo ${arr[@]}
 }
 
+
 # here assuming the 4-th column is the hostname, and 5-th column is the username
 SSH_HOSTS=($(parse_ssh_hosts config.sh \$5\"@\"\$4))
 
+## Get the length of the array
+#size=${#SSH_HOSTS[@]}
+#
+##for SSH_HOST in "${SSH_HOSTS[@]}"
+#for ((i=0; i<$size; i++)); do
+#
+#
+#SSH_HOST=${SSH_HOSTS[0]}
+#
 # Get the length of the array
 size=${#SSH_HOSTS[@]}
-
-#for SSH_HOST in "${SSH_HOSTS[@]}"
 for ((i=0; i<$size; i++)); do
 
 SSH_HOST=${SSH_HOSTS[$i]}
 
-start_replica ${SSH_HOST} $i &
+start_monitor ${SSH_HOST} $i &
 
 done
+
+#start_test ${SSH_HOST} 20 50
+
+#done
 
 wait

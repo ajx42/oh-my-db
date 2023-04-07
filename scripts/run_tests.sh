@@ -27,6 +27,10 @@ parse_ssh_hosts()
     echo ${arr[@]}
 }
 
+./scripts/startup_cluster_db.sh &
+./scripts/monitor/deploy_monitor.sh &
+
+sleep 5
 
 # here assuming the 4-th column is the hostname, and 5-th column is the username
 SSH_HOSTS=($(parse_ssh_hosts config.sh \$5\"@\"\$4))
@@ -39,8 +43,7 @@ SSH_HOSTS=($(parse_ssh_hosts config.sh \$5\"@\"\$4))
 #
 #
 SSH_HOST=${SSH_HOSTS[0]}
-
-start_test ${SSH_HOST} 6 50
+start_test ${SSH_HOST} 20 50
 
 #done
 

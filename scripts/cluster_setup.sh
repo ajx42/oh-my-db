@@ -1,5 +1,5 @@
 #!/bin/bash
-BRANCH="hc_testing"
+BRANCH="testing"
 
 setup () 
 {

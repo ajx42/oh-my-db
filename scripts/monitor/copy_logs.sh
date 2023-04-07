@@ -1,17 +1,19 @@
 set -x
 
+timestamp=$(date +%Y-%m-%d-%H-%M-%S)
+
+resultsDir=./monitor_results/${timestamp}
+
+mkdir -p ${resultsDir}
+
 start_replica()
 {
     SSH_HOST=$1
     id=$2
 
-    ssh ${SSH_HOST} << EOF
-    killall monitor.sh
-    killall replica
-    rm -rf /tmp/db
-EOF
+    mkdir $resultsDir/$SSH_HOST
 
-
+    scp ${SSH_HOST}:~/oh-my-db/*.log $resultsDir/$SSH_HOST
 }
 
 parse_ssh_hosts()

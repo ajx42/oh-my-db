@@ -5,10 +5,7 @@ start_replica()
     SSH_HOST=$1
     id=$2
 
-    ssh ${SSH_HOST} << EOF
-    killall monitor.sh
-    killall replica
-    rm -rf /tmp/db
+    scp -r ./scripts/monitor ${SSH_HOST}:~/oh-my-db/scripts/
 EOF
 
 
