@@ -26,6 +26,8 @@ public:
   void store( std::string key, int32_t val );
   int32_t load( std::string key, int32_t defaultVal );
   std::string getFilename( std::string key );
+  
+  static std::optional<int32_t> loadInt( std::string filename );
 
 private:
   std::string fileBaseName_; 
@@ -58,20 +60,26 @@ inline void PersistentStore::store( std::string key, int32_t val )
   rename( tmpFile.c_str(), getFilename( key ).c_str() );
 }
 
-inline int32_t PersistentStore::load( std::string key, int32_t defaultVal )
+inline std::optional<int32_t>
+PersistentStore::loadInt( std::string filename )
 {
-  auto filename = getFilename( key );
   auto fd = open( filename.c_str(), O_RDONLY );
   if ( fd <= 0 ) {
-    return defaultVal;
+    return {};
   }
   uint8_t buf[4] = {0};
   auto numBytes = pread( fd, buf, 4, 0 );
   close( fd );
   if ( numBytes != sizeof(int32_t) ) {
-    return defaultVal;
+    return {};
   }
   return *reinterpret_cast<int32_t*>( buf );
 }
 
+
+inline int32_t PersistentStore::load( std::string key, int32_t defaultVal )
+{
+  auto filename = getFilename( key );
+  return loadInt( filename ).value_or( defaultVal );
+}
 }

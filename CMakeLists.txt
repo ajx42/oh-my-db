@@ -11,6 +11,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 
 set(OH_MY_SERVER_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/ohmyserver")
 set(OH_MY_RAFT_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/ohmyraft")
+set(OH_MY_TOOLS_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/ohmytools")
 
 # include generated source files (proto)
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}")
@@ -18,6 +19,7 @@ include_directories("${CMAKE_CURRENT_SOURCE_DIR}/wowUtils")
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/ohmyserver")
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/ohmyraft")
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/ohmydb")
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/ohmytools")
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/leveldb/include")
 
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/argparse/include")
@@ -26,4 +28,4 @@ include_directories("${OH_MY_SERVER_BINARY_DIR}")
 
 add_subdirectory(ohmyserver "${OH_MY_SERVER_BINARY_DIR}")
 add_subdirectory(ohmyraft "${OH_MY_RAFT_BINARY_DIR}")
-
+add_subdirectory(ohmytools "${OH_MY_TOOLS_BINARY_DIR}")
