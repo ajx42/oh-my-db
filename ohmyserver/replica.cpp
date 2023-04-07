@@ -65,6 +65,10 @@ int main(int argc, char **argv)
       .default_value( false )
       .implicit_value( true );
 
+  program.add_argument("--storedir")
+      .help("directory to store persistent raft state in")
+      .default_value("/tmp/");
+
   try {
       program.parse_args( argc, argv );
   }
@@ -78,6 +82,8 @@ int main(int argc, char **argv)
   auto config_path = program.get<std::string>("--config");
   auto id = std::stoi(program.get<std::string>("--id"));
   auto db_path = program.get<std::string>("--db_path");
+  auto store_dir = program.get<std::string>("--storedir");  
+  auto enableBootstrap = program["--bootstrap"] == true;
 
   auto servers = ParseConfig(config_path);
 
@@ -90,11 +96,12 @@ int main(int argc, char **argv)
   };
 
   auto selfDetails = servers[id];
-  printServer("MyDetails", id);
+  printServer("ServerDetails", id);
 
-  auto enableBootstrap = program["--bootstrap"] == true;
-
-  ReplicaManager::Instance().initialiseServices( servers, id, true, db_path, enableBootstrap );  
+  ReplicaManager::Instance().initialiseServices(
+      servers, id, true, db_path, enableBootstrap, store_dir );  
+  
+  // start up the replica
   ReplicaManager::Instance().start();
 
   std::this_thread::sleep_for(std::chrono::seconds(5));

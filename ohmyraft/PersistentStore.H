@@ -1,7 +1,23 @@
 #pragma once
 
+#include <string>
+#include <functional>
+#include <vector>
+#include <cstdio>
+#include <fstream>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <fcntl.h>
+
 namespace raft {
 
+// Persistent Key-Val Store to store RAFT persistent state.
+// We use one file per key to avoid reading data we don't need to
+// when loading a key. It also simplifies writes.
+// The files are named as:
+//        <fileBaseName><key>.persist 
+// OhMyRaft uses the following format:
+//        <path/to/storeDir>/raft.<replica_id>.<key>.persist
 class PersistentStore {
 public:
   PersistentStore() {};
@@ -33,10 +49,13 @@ inline std::string PersistentStore::getFilename( std::string key )
 
 inline void PersistentStore::store( std::string key, int32_t val )
 {
-  auto filename = getFilename( key );
-  auto fd = open( filename.c_str(), O_WRONLY | O_CREAT, 0777 );
+  // write to a tmp file and then rename to achieve atomic write
+  auto tmpFile = getFilename( key ) + ".tmp";
+  auto fd = open( tmpFile.c_str(), O_WRONLY | O_CREAT, 0777 );
   write( fd, (const char*) &val, sizeof(val) );
-  close( fd ); 
+  close( fd );
+
+  rename( tmpFile.c_str(), getFilename( key ).c_str() );
 }
 
 inline int32_t PersistentStore::load( std::string key, int32_t defaultVal )

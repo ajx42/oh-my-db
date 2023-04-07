@@ -88,7 +88,7 @@ public:
   void stop();
 
   // initialise persistent state, optionally bootstrap from existing
-  void bootstrap( int32_t myId, bool withBootstrap );
+  void bootstrap( int32_t myId, bool withBootstrap, std::string storeDir );
 
   // job submission
   std::pair<bool, int32_t > submit( RaftOp op );
@@ -323,14 +323,17 @@ void RaftManager<T>::executerImpl()
 }
 
 template <class T>
-void RaftManager<T>::bootstrap( int32_t myId, bool withBootstrap )
+void RaftManager<T>::bootstrap( int32_t myId, bool withBootstrap, std::string storeDir )
 {
   id_ = myId;
+
+  auto storeFilePrefix = storeDir + "/raft." + std::to_string( id_ ) + '.';
   
-  LogInfo("Enable Bootstrap: " + std::to_string( withBootstrap ) );
+  LogInfo("EnableBootstrap=" + std::to_string( withBootstrap ) + " "
+          "StoreDir=" + storeDir);
   
   state_.Logs.setup(
-      "/tmp/raft." + std::to_string( id_ ) + ".log.persist",
+      storeFilePrefix + "log.persist",
       withBootstrap,
       []( LogEntry val ) { val.op = val.op.withoutPromise(); return val; }
   );
@@ -340,7 +343,7 @@ void RaftManager<T>::bootstrap( int32_t myId, bool withBootstrap )
     LogInfo("BOOT OP: " + entry.str() );
   }
 
-  state_.pStore.setup( "/tmp/raft." + std::to_string( id_ ) + "." );
+  state_.pStore.setup( storeFilePrefix );
   
   if ( withBootstrap ) {
     state_.VotedFor = state_.pStore.load( "VotedFor", -1 );

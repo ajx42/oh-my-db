@@ -11,10 +11,10 @@
 
 namespace raft {
 
-// this impl is barely complete -- massively incomplete actually
-// do not use it for anything anywhere else ever!!!
-// it is just supposed to support the few ops that we use
-// in our raft log handling
+// This impl is barely complete -- massively incomplete actually.
+// Note that this will only work if the only ops being done on the
+// vector are "resize" and "push_back". Updating any existing item
+// in the vector is not supported.
 template <class T>
 class PersistentVector : public std::vector<T>
 {
@@ -23,13 +23,18 @@ public:
   
   template <class ...Args>
   PersistentVector( Args... args );
-
   ~PersistentVector();
 
+  // When we resize down, we will truncate our persistent store file
   void resize( size_t newSize );
+
+  // When persist is called, the items in the vector that we haven't
+  // persisted get stored.
   void persist();
+
   bool bootstrap( std::string filename );
-  void setup( std::string filename, bool withBootstrap, std::function<T(T)> preproc = [](T val) { return val; } );
+  void setup( std::string filename, bool withBootstrap,
+              std::function<T(T)> preproc = [](T val) { return val; } );
 
 private:
   int fd;
@@ -93,8 +98,6 @@ void PersistentVector<T>::persist()
   }
 
   resize( curSize );
-  LogInfo("Persist called with: persistedItems_=" + std::to_string( persistedItems_ ) );
-  
   
   for ( size_t i = persistedItems_ ; i < curSize ; ++i ) {
     auto copy = preproc_( *( Base_t::data() + i ) );
@@ -108,7 +111,6 @@ void PersistentVector<T>::persist()
 template <class T>
 bool PersistentVector<T>::bootstrap( std::string filename )
 {
-  std::cout << filename << std::endl;
   auto readFd = open( filename.c_str(), O_RDONLY );
   if ( readFd <= 0 ) {
     LogWarn( "Could not open file to bootstrap!" );
@@ -130,9 +132,21 @@ bool PersistentVector<T>::bootstrap( std::string filename )
 
   close( readFd );
 
-  for ( auto i = 0; i < fileSize; i += sizeof(T) ) {
+  // IMP: Hopefully the below approach works and we won't need atomic
+  // temp file write and swap. Why avoid? We'd have to either maintain
+  // two copies of the file, or write the entire log to the temp file
+  // before making an incremental change.
+  // Assuming that the file may have some incomplete writes at the end
+  // because maybe we crashed while writing.
+  // This is why we have an extra check that the amount of data we need
+  // must be present before casting.
+  for ( auto i = 0; i + sizeof(T) <= fileSize; i += sizeof(T) ) {
     Base_t::push_back( *reinterpret_cast<const T*>( &buf[i] ) );
   }
+
+  // Doing a resize to the same size here. This will truncate the
+  // persistent storage to appropriate length.
+  resize( Base_t::size() );
   return true;
 }
 
