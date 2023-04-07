@@ -15,6 +15,8 @@
 #include "ConsensusUtils.H"
 #include "TestUtils.H"
 #include "WowLogger.H"
+#include "PersistentVector.H"
+#include "PersistentStore.H"
 
 namespace raft {
 
@@ -34,7 +36,7 @@ struct RaftState
   // (needs to be) persistent state
   int32_t CurrentTerm;
   int32_t VotedFor;
-  std::vector<LogEntry> Logs;
+  PersistentVector<LogEntry> Logs;
 
   // volatile state
   RaftRole Role;
@@ -49,14 +51,24 @@ struct RaftState
 
   // for candidate only, non standard
   int32_t VotesReceived;
-
+  
+  // handle persistence of VotedFor and CurrentTerm
+  PersistentStore pStore;  
+  void persist();
 };
+
+inline void RaftState::persist()
+{
+  pStore.store( "VotedFor", VotedFor );
+  pStore.store( "CurrentTerm", CurrentTerm );
+}
 
 template <class ClientT>
 class RaftManager
 {
 public:
-  RaftManager() { 
+  RaftManager()
+  { 
     state_.CurrentTerm = 0;
     state_.VotedFor = -1;
     state_.Logs.reserve( 10000 );
@@ -69,11 +81,14 @@ public:
 
   ~RaftManager();
 
-  void initialiseConnections( int32_t myId, std::map<int32_t, std::unique_ptr<ClientT>>&& peers );
+  void initialiseConnections( std::map<int32_t, std::unique_ptr<ClientT>>&& peers );
 
   // control points
   void start();
   void stop();
+
+  // initialise persistent state, optionally bootstrap from existing
+  void bootstrap( int32_t myId, bool withBootstrap );
 
   // job submission
   std::pair<bool, int32_t > submit( RaftOp op );
@@ -130,9 +145,8 @@ private:
 // no need for locking state, this is to be called before start is called
 template <class T>
 void RaftManager<T>::initialiseConnections(
-    int32_t myId, std::map<int32_t, std::unique_ptr<T>>&& peers )
+    std::map<int32_t, std::unique_ptr<T>>&& peers )
 {
-  id_ = myId;
   peers_ = std::move(peers);
   for ( auto& [id, _]: peers_ ) {
     state_.NextIndex[id] = 0;
@@ -170,6 +184,7 @@ void RaftManager<T>::runLeaderOneIter()
       .op = op
     });
   }
+  state_.Logs.persist();
   state_.Mut.unlock();
 
   for ( auto& [id, peer] : peers_ ) {
@@ -299,11 +314,43 @@ void RaftManager<T>::executerImpl()
     std::swap( execIn_, raftOut_ );
     raftOutMutex_.unlock();
 
+    LogInfo("Received # OPS: " + std::to_string(execIn_.size()));
     for ( auto op: execIn_ ) {
       op.execute();
     }
     execIn_.clear();
   }
+}
+
+template <class T>
+void RaftManager<T>::bootstrap( int32_t myId, bool withBootstrap )
+{
+  id_ = myId;
+  
+  LogInfo("Enable Bootstrap: " + std::to_string( withBootstrap ) );
+  
+  state_.Logs.setup(
+      "/tmp/raft." + std::to_string( id_ ) + ".log.persist",
+      withBootstrap,
+      []( LogEntry val ) { val.op = val.op.withoutPromise(); return val; }
+  );
+  
+  LogInfo("Bootstrapped Log Length: " + std::to_string( state_.Logs.size() ) );
+  for ( const auto& entry: state_.Logs ) {
+    LogInfo("BOOT OP: " + entry.str() );
+  }
+
+  state_.pStore.setup( "/tmp/raft." + std::to_string( id_ ) + "." );
+  
+  if ( withBootstrap ) {
+    state_.VotedFor = state_.pStore.load( "VotedFor", -1 );
+    state_.CurrentTerm = state_.pStore.load( "CurrentTerm", 0 );
+  } else {
+    state_.persist();
+  }
+
+  LogInfo("Bootstrapped VotedFor: " + std::to_string( state_.VotedFor ));
+  LogInfo("Bootstrapped CurrentTerm: " + std::to_string( state_.CurrentTerm ));
 }
 
 template <class T>
@@ -398,6 +445,7 @@ AppendEntriesRet RaftManager<T>::AppendEntries( AppendEntriesParams args )
             LogError("mismatch of index");
           }
         }
+        state_.Logs.persist();
       }
 
       if ( args.leaderCommit > state_.CommitIndex ) {
@@ -452,6 +500,7 @@ RequestVoteRet RaftManager<T>::RequestVote( RequestVoteParams args )
     ret.voteGranted = false;
   }
 
+  state_.persist();
   ret.term = state_.CurrentTerm;
   LogInfo("Replying to RequestVote from " + std::to_string(args.candidateId));
   LogInfo("Ret: " + ret.str());
@@ -467,6 +516,7 @@ void RaftManager<T>::becomeFollower( int term )
   state_.Role = RaftRole::Follower;
   state_.VotedFor = -1;
   state_.ElectionResetEvent = std::chrono::system_clock::now();
+  state_.persist();
 }
 
 template <class T>
@@ -477,6 +527,7 @@ void RaftManager<T>::becomeCandidate(int term)
   state_.Role = RaftRole::Candidate;
   state_.ElectionResetEvent = std::chrono::system_clock::now();
   state_.VotedFor = id_;
+  state_.persist();
 }
 
 template <class T>
@@ -494,6 +545,7 @@ void RaftManager<T>::becomeLeader()
     state_.NextIndex[id] = state_.Logs.size();
     state_.MatchIndex[id] = -1;
   }
+  state_.persist();
 }
 // -- end of role transition helpers
 

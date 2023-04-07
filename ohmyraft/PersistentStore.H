@@ -1,0 +1,58 @@
+#pragma once
+
+namespace raft {
+
+class PersistentStore {
+public:
+  PersistentStore() {};
+  
+  void setup( std::string fileBaseName );
+  void store( std::string key, int32_t val );
+  int32_t load( std::string key, int32_t defaultVal );
+  std::string getFilename( std::string key );
+
+private:
+  std::string fileBaseName_; 
+  bool initialised_ = false;
+};
+
+inline void PersistentStore::setup( std::string fileBaseName )
+{
+  if ( initialised_ ) {
+    return;
+  }
+
+  initialised_ = true;
+  fileBaseName_ = fileBaseName;
+}
+
+inline std::string PersistentStore::getFilename( std::string key )
+{
+  return fileBaseName_ + key + ".persist";
+}
+
+inline void PersistentStore::store( std::string key, int32_t val )
+{
+  auto filename = getFilename( key );
+  auto fd = open( filename.c_str(), O_WRONLY | O_CREAT, 0777 );
+  write( fd, (const char*) &val, sizeof(val) );
+  close( fd ); 
+}
+
+inline int32_t PersistentStore::load( std::string key, int32_t defaultVal )
+{
+  auto filename = getFilename( key );
+  auto fd = open( filename.c_str(), O_RDONLY );
+  if ( fd <= 0 ) {
+    return defaultVal;
+  }
+  uint8_t buf[4] = {0};
+  auto numBytes = pread( fd, buf, 4, 0 );
+  close( fd );
+  if ( numBytes != sizeof(int32_t) ) {
+    return defaultVal;
+  }
+  return *reinterpret_cast<int32_t*>( buf );
+}
+
+}

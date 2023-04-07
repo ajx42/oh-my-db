@@ -60,6 +60,11 @@ int main(int argc, char **argv)
       .required()
       .help("leveldb file path");
 
+  program.add_argument("--bootstrap")
+      .help("bootstrap from existing state")
+      .default_value( false )
+      .implicit_value( true );
+
   try {
       program.parse_args( argc, argv );
   }
@@ -87,7 +92,9 @@ int main(int argc, char **argv)
   auto selfDetails = servers[id];
   printServer("MyDetails", id);
 
-  ReplicaManager::Instance().initialiseServices( servers, id, true, db_path );  
+  auto enableBootstrap = program["--bootstrap"] == true;
+
+  ReplicaManager::Instance().initialiseServices( servers, id, true, db_path, enableBootstrap );  
   ReplicaManager::Instance().start();
 
   std::this_thread::sleep_for(std::chrono::seconds(5));
