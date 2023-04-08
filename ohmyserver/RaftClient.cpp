@@ -6,6 +6,7 @@
 #include <memory>
 #include <argparse/argparse.hpp>
 #include <chrono>
+#include <cstring>
 
 #include "OhMyConfig.H"
 #include "WowLogger.H"
@@ -40,32 +41,32 @@ int main(int argc, char **argv)
     auto id = std::stoi(program.get<std::string>("--id"));
 
     auto servers = ParseConfig(configPath);
-    auto serverAddr = servers[id].ip + ":" + std::to_string(servers[id].raft_port);
+    auto serverAddr = std::string(servers[id].ip) + ":" + std::to_string(servers[id].raft_port);
 
     LogInfo("Client: Starting contact on " + serverAddr);
 
     auto raftClient = RaftClient( grpc::CreateChannel(serverAddr, grpc::InsecureChannelCredentials()) );
     raft::AddServerParams params;
-    params.serverId = 3;
-    params.ip = "10.10.1.1";
-    params.raftPort = 12348;
-    params.dbPort = 8083;
-    params.name = "node4";
+    params.serverId = 4;
+    strcpy(params.ip, "10.10.1.1");
+    params.dbPort = 12349;
+    params.raftPort = 8084;
+    strcpy(params.name, "node4");
 
     raft::RemoveServerParams rm_params;
-    rm_params.serverId = 2;
+    rm_params.serverId = 3;
 
-    // auto ret = raftClient.RemoveServer( rm_params );
-    // if ( ret.has_value() ) {
-    //     std::cout << ret.value().str() << std::endl;
-    // } else {
-    //     std::cout << "NOT_FOUND" << std::endl;
-    //     return 0;
-    // }
+    auto ret = raftClient.RemoveServer( rm_params );
+    if ( ret.has_value() ) {
+        std::cout << ret.value().str() << std::endl;
+    } else {
+        std::cout << "NOT_FOUND" << std::endl;
+        return 0;
+    }
     
-    // // sleep for a bit
-    // std::cout << "Sleeping for 15 seconds" << std::endl;
-    // std::this_thread::sleep_for(std::chrono::seconds(15));
+    // sleep for a bit
+    std::cout << "Sleeping for 15 seconds" << std::endl;
+    std::this_thread::sleep_for(std::chrono::seconds(15));
 
     auto ret2 = raftClient.AddServer( params );
     

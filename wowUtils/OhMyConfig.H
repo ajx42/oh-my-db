@@ -5,16 +5,17 @@
 #include <iostream>
 #include <fstream>
 #include <unordered_map>
+#include <cstring>
 
 struct ServerInfo {
     int id;
-    std::string ip;
+    char ip[20];
     int raft_port;
     int db_port;
-    std::string name;
+    char name[20];
 
     std::string str() const;
-};
+} __attribute__((__packed__));
 
 struct TokenizedOut {
   std::unordered_map<std::string, int32_t> header;
@@ -86,8 +87,8 @@ inline std::vector<ServerInfo> ParseConfig(std::string filename)
         }
         ServerInfo server;
         server.id = id;
-        server.name = tokens[header["name"]];
-        server.ip = tokens[header["intf_ip"]];
+        strcpy(server.ip, tokens[header["intf_ip"]].c_str());
+        strcpy(server.name, tokens[header["name"]].c_str());
         server.raft_port = stoi(tokens[header["raft_port"]]);
         server.db_port = stoi(tokens[header["db_port"]]);
         servers[id] = server;

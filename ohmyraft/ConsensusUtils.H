@@ -256,10 +256,10 @@ inline std::string RequestVoteRet::str() const {
 
 struct AddServerParams {
   int serverId;
-  std::string ip;
+  char ip[20];
   int raftPort;
   int dbPort;
-  std::string name;
+  char name[20];
 
   std::string str() const;
 };

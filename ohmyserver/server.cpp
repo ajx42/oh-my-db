@@ -59,7 +59,7 @@ int main(int argc, char **argv)
     for (auto [id, server] : servers )
     {
         std::cout << "Testing connection to " << server.name << " at " << server.ip << ":" << server.raft_port << std::endl;
-        std::string address(server.ip + ":" + std::to_string(server.raft_port));
+        std::string address(std::string(server.ip) + ":" + std::to_string(server.raft_port));
         RaftClient client(grpc::CreateChannel(address, grpc::InsecureChannelCredentials()));
 
         while (client.Ping(1) < 0)

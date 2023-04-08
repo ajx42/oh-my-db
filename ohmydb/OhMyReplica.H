@@ -92,7 +92,7 @@ inline void ReplicaManager::initialiseServices(
     if ( (int)i == id ) {
       continue;
     }
-    auto address = serverConfig.ip + ":" + std::to_string(serverConfig.raft_port); 
+    auto address = std::string(serverConfig.ip) + ":" + std::to_string(serverConfig.raft_port); 
     peers[i] = std::make_unique<RaftClient>(grpc::CreateChannel(
         address, grpc::InsecureChannelCredentials())); 
   }

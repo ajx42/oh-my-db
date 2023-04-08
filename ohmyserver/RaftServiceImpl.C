@@ -78,11 +78,10 @@ grpc::Status RaftService::AddServer(
 {
   raft::AddServerParams param;
   param.serverId = request->server_id();
-  param.ip = request->ip();
   param.raftPort = request->raft_port();
   param.dbPort = request->db_port();
-  param.name = request->name();
-
+  strcpy( param.ip, request->ip().c_str() );
+  strcpy( param.name, request->name().c_str() );
 
   auto ret = ReplicaManager::Instance().AddServer( param );
   response->set_error_code( ret.errorCode );
