@@ -55,17 +55,17 @@ int main(int argc, char **argv)
     raft::RemoveServerParams rm_params;
     rm_params.serverId = 2;
 
-    auto ret = raftClient.RemoveServer( rm_params );
-    if ( ret.has_value() ) {
-        std::cout << ret.value().str() << std::endl;
-    } else {
-        std::cout << "NOT_FOUND" << std::endl;
-        return 0;
-    }
+    // auto ret = raftClient.RemoveServer( rm_params );
+    // if ( ret.has_value() ) {
+    //     std::cout << ret.value().str() << std::endl;
+    // } else {
+    //     std::cout << "NOT_FOUND" << std::endl;
+    //     return 0;
+    // }
     
-    // sleep for a bit
-    std::cout << "Sleeping for 15 seconds" << std::endl;
-    std::this_thread::sleep_for(std::chrono::seconds(15));
+    // // sleep for a bit
+    // std::cout << "Sleeping for 15 seconds" << std::endl;
+    // std::this_thread::sleep_for(std::chrono::seconds(15));
 
     auto ret2 = raftClient.AddServer( params );
     

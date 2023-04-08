@@ -20,7 +20,8 @@ public:
   // peer before starting operation. This should be used for testing only!
   void initialiseServices(
       std::map<int32_t, ServerInfo> clusterConfig, int id, bool waitForPeers,
-      std::string dbPath, bool enableBootstrap, std::string storeDir );
+      std::string dbPath, bool enableBootstrap, std::string storeDir,
+      std::string ip = "", int raftPort = -1, int dbPort = -1 );
 
   // These methods are accessed by the Database RPC server layer. But exposing
   // them as public methods here allows for quick testing :D
@@ -56,20 +57,18 @@ private:
 
 inline void ReplicaManager::initialiseServices(
     std::map<int32_t, ServerInfo> clusterConfig, int id, bool waitForPeers,
-    std::string dbPath, bool enableBootstrap, std::string storeDir )
+    std::string dbPath, bool enableBootstrap, std::string storeDir,
+    std::string ip, int raftPort, int dbPort )
 {
   raft_.bootstrap( id, enableBootstrap, storeDir );
 
-  // @TODO: If we are bootstrapping, we should read server info from log
-  // so there is no need to pass serverInfo here. But for debuggin purpose,
-  // it's still ideal to enable bootstrapping with server info.
-  if ( !enableBootstrap ) {
-    raft_.setClusterConfig( clusterConfig );
-  }
+  raft_.setClusterConfig( clusterConfig );
 
   clusterConfig = raft_.getClusterConfig();
-  auto raftPort = clusterConfig[id].raft_port;
-  auto raftIp = clusterConfig[id].ip;
+
+  ip = ip == "" ? clusterConfig[id].ip : ip;
+  dbPort = dbPort == -1 ? clusterConfig[id].db_port : dbPort;
+  raftPort = raftPort == -1 ? clusterConfig[id].raft_port : raftPort;
 
   raft::LevelDB<int,int>::Instance().initialize(dbPath);
 
@@ -77,7 +76,7 @@ inline void ReplicaManager::initialiseServices(
   grpc::reflection::InitProtoReflectionServerBuilderPlugin();
 
   // start raft server
-  std::string raftServerAddr(raftIp + ":" + std::to_string(raftPort));
+  std::string raftServerAddr(ip + ":" + std::to_string(raftPort));
   raftBuilder_.AddListeningPort(raftServerAddr, grpc::InsecureServerCredentials());
   raftBuilder_.RegisterService(&raftService_);
   raftServer_ = std::thread([this]{ 
@@ -120,9 +119,7 @@ inline void ReplicaManager::initialiseServices(
   LogInfo( "Services Started: Raft Initialised" );
 
   // start Database RPC server
-  auto dbIp = clusterConfig[id].ip;
-  auto dbPort = clusterConfig[id].db_port;
-  std::string dbServerAddr(dbIp + ":" + std::to_string(dbPort));
+  std::string dbServerAddr(ip + ":" + std::to_string(dbPort));
   dbBuilder_.AddListeningPort(dbServerAddr, grpc::InsecureServerCredentials());
   dbBuilder_.RegisterService(&dbService_);
   dbServer_ = std::thread([this]{ 

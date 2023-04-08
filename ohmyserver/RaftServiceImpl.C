@@ -21,6 +21,7 @@ grpc::Status RaftService::AppendEntries(
   param.prevLogTerm = request->prev_log_term();
   param.leaderCommit = request->leader_commit();
 
+
   for ( size_t i = 0; i < request->entries().size(); i += sizeof(raft::TransportEntry) ) {
     auto& entry = *reinterpret_cast<const raft::TransportEntry*>( request->entries().data() + i );
     raft::RaftOp::arg_t args;

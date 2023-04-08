@@ -69,6 +69,24 @@ int main(int argc, char **argv)
       .help("directory to store persistent raft state in")
       .default_value("/tmp/");
 
+  program.add_argument("--addedNode")
+      .help("whether or not this node is being added to an existing cluster")
+      .default_value( false )
+      .implicit_value( true );
+  
+  program.add_argument("--ip")
+      .help("IP address of the node. Only needed when addedNode is true.")
+      .default_value("");
+   
+  program.add_argument("--raft_port")
+      .help("Raft port of the node. Only needed when addedNode is true.")
+      .default_value("-1");
+
+  program.add_argument("--db_port")
+      .help("DB port of the node. Only needed when addedNode is true.")
+      .default_value("-1");
+    
+
   try {
       program.parse_args( argc, argv );
   }
@@ -84,6 +102,10 @@ int main(int argc, char **argv)
   auto db_path = program.get<std::string>("--db_path");
   auto store_dir = program.get<std::string>("--storedir");  
   auto enableBootstrap = program["--bootstrap"] == true;
+  auto isAddedNode = program["--addedNode"] == true;
+  auto ip = program.get<std::string>("--ip");
+  auto raft_port = std::stoi(program.get<std::string>("--raft_port"));
+  auto db_port = std::stoi(program.get<std::string>("--db_port"));
 
   auto servers = ParseConfig(config_path);
 
@@ -95,11 +117,17 @@ int main(int argc, char **argv)
             " DB Port=" + std::to_string(servers[id].db_port));
   };
 
-  auto selfDetails = servers[id];
-  printServer("ServerDetails", id);
 
-  ReplicaManager::Instance().initialiseServices(
-      servers, id, true, db_path, enableBootstrap, store_dir );  
+  if ( !isAddedNode ) {
+    auto selfDetails = servers[id];
+    printServer("ServerDetails", id);
+    ReplicaManager::Instance().initialiseServices(
+        servers, id, true, db_path, enableBootstrap, store_dir);
+  } else {
+    ReplicaManager::Instance().initialiseServices(
+      servers, id, false, db_path, enableBootstrap, store_dir,
+      ip=ip, raft_port=raft_port, db_port=db_port );  
+  }
   
   // start up the replica
   ReplicaManager::Instance().start();

@@ -519,11 +519,16 @@ AppendEntriesRet RaftManager<T>::AppendEntries( AppendEntriesParams args )
           if ( args.entries[i].op.kind ==  RaftOp::OpType::ADD_SERVER ) {
             LogInfo( "Got add server: " + args.entries[i].op.str() );
             ServerInfo info = std::get<RaftOp::addserverarg_t>(args.entries[i].op.args);
-            std::string addr = info.ip + ":" + std::to_string(info.raft_port);
-            lock.unlock();
-            addPeer( info.id, 
+            if ( info.id != id_ )
+            {
+              LogInfo( "Applying add server" );
+              state_.ClusterConfig[info.id] = info;
+              lock.unlock();
+              std::string addr = info.ip + ":" + std::to_string(info.raft_port);
+              addPeer( info.id, 
                     std::make_unique<T>(grpc::CreateChannel(addr, grpc::InsecureChannelCredentials())));
-            lock.lock();
+              lock.lock();
+            }
           } else if ( args.entries[i].op.kind ==  RaftOp::OpType::REMOVE_SERVER ) {
             LogInfo( "Got remove server: " + args.entries[i].op.str() );
             lock.unlock();
@@ -576,6 +581,14 @@ RequestVoteRet RaftManager<T>::RequestVote( RequestVoteParams args )
   LogInfo("Received " + args.str()); 
   std::lock_guard<std::mutex> lock(state_.Mut);
   RequestVoteRet ret;
+
+  // check if it is a member
+  if ( peers_.find(args.candidateId) == peers_.end() ) {
+    LogInfo("Candidate is not a member");
+    ret.term = -1;
+    ret.voteGranted = false;
+    return ret;
+  }
   
   int lastLogIndex = state_.Logs.size() - 1;
   int lastLogTerm = -1;
@@ -631,14 +644,14 @@ AddServerRet RaftManager<T>::AddServer( AddServerParams args)
   // Catch up
   // @todo
 
+  LogInfo("Let's wait until prev config change committed!");
   // wait until previous config change is commited
   int retryCount = 0;
+  stateLock.unlock();
   while (1) {
-    stateLock.lock();
     if ( state_.LastConfigChangeCommitted ) {
       break;
     }
-    stateLock.unlock();
 
     retryCount++;
     if ( retryCount == 10 ) 
@@ -655,7 +668,9 @@ AddServerRet RaftManager<T>::AddServer( AddServerParams args)
 
   state_.LastConfigChangeCommitted = false;
 
+  LogInfo("Let's apply config change!");
   // change state first, for safety
+  stateLock.lock();
   state_.ClusterConfig[serverId] = info;
   state_.LastConfigChangeCommitted = false;
   stateLock.unlock();
