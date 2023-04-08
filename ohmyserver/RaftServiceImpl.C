@@ -62,6 +62,39 @@ grpc::Status RaftService::RequestVote(
   return grpc::Status::OK;
 }
 
+grpc::Status RaftService::AddServer(
+    grpc::ServerContext *, const raftproto::AddServerRequest *request,
+    raftproto::AddServerResponse *response)
+{
+  raft::AddServerParams param;
+  param.serverId = request->server_id();
+  param.ip = request->ip();
+  param.raftPort = request->raft_port();
+  param.dbPort = request->db_port();
+  param.name = request->name();
+
+
+  auto ret = ReplicaManager::Instance().AddServer( param );
+  response->set_error_code( ret.errorCode );
+  response->set_leader_addr( ret.leaderAddr );
+
+  return grpc::Status::OK;
+}
+
+grpc::Status RaftService::RemoveServer(
+    grpc::ServerContext *, const raftproto::RemoveServerRequest *request,
+    raftproto::RemoveServerResponse *response)
+{
+  raft::RemoveServerParams param;
+  param.serverId = request->server_id();
+
+  auto ret = ReplicaManager::Instance().RemoveServer( param );
+  response->set_error_code( ret.errorCode );
+  response->set_leader_addr( ret.leaderAddr );
+
+  return grpc::Status::OK;
+}
+
 int32_t RaftClient::Ping(int32_t cmd)
 {
     raftproto::Cmd request;
@@ -142,6 +175,54 @@ RaftClient::RequestVote( raft::RequestVoteParams args )
   raft::RequestVoteRet ret = {
     .term = response.term(),
     .voteGranted = static_cast<bool>( response.vote_granted() )
+  };
+  return {ret};
+}
+
+std::optional<raft::AddServerRet>
+RaftClient::AddServer( raft::AddServerParams args )
+{
+  raftproto::AddServerRequest request;
+  request.set_server_id( args.serverId );
+  request.set_ip( args.ip );
+  request.set_raft_port( args.raftPort );
+  request.set_db_port( args.dbPort );
+  request.set_name( args.name );
+
+  raftproto::AddServerResponse response;
+  grpc::ClientContext context;
+  
+  auto status = stub_->AddServer(&context, request, &response);
+
+  if ( !status.ok() ) {
+    return {};
+  }
+
+  raft::AddServerRet ret = {
+    .errorCode = static_cast<raft::ErrorCode>(response.error_code()),
+    .leaderAddr = response.leader_addr()
+  };
+  return {ret};
+}
+
+std::optional<raft::RemoveServerRet>
+RaftClient::RemoveServer( raft::RemoveServerParams args )
+{
+  raftproto::RemoveServerRequest request;
+  request.set_server_id( args.serverId );
+
+  raftproto::RemoveServerResponse response;
+  grpc::ClientContext context;
+  
+  auto status = stub_->RemoveServer(&context, request, &response);
+
+  if ( !status.ok() ) {
+    return {};
+  }
+
+  raft::RemoveServerRet ret = {
+    .errorCode = static_cast<raft::ErrorCode>(response.error_code()),
+    .leaderAddr = response.leader_addr()
   };
   return {ret};
 }

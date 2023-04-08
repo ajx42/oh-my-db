@@ -6,6 +6,8 @@ service Raft {
   rpc TestCall(Cmd) returns(Ack) {}
   rpc AppendEntries(AppendEntriesRequest) returns(AppendEntriesResponse) {}
   rpc RequestVote(RequestVoteRequest) returns(RequestVoteResponse) {}
+  rpc AddServer(AddServerRequest) returns(AddServerResponse) {}
+  rpc RemoveServer(RemoveServerRequest) returns(RemoveServerResponse) {}
 }
 
 message Ack {
@@ -42,3 +44,24 @@ message RequestVoteResponse {
   int32 vote_granted = 2;
 }
 
+message AddServerRequest {
+  int32 server_id = 1;
+  string ip = 2;
+  int32 db_port = 3;
+  int32 raft_port = 4;
+  string name = 5;
+}
+
+message AddServerResponse {
+  int32 error_code = 1;
+  string leader_addr = 2;
+}
+
+message RemoveServerRequest {
+  int32 server_id = 1;
+}
+
+message RemoveServerResponse {
+  int32 error_code = 1;
+  string leader_addr = 2;
+}

@@ -125,4 +125,11 @@ target_link_libraries(replica raft_grpc_proto)
 add_executable(client client.cpp)
 target_link_libraries(client db_grpc_proto)
 
+add_executable(raftclient RaftClient.cpp)
+target_link_libraries(raftclient leveldb)
+target_link_libraries(raftclient ohmyraftrpc)
+target_link_libraries(raftclient dbserverrpc)
+target_link_libraries(raftclient db_grpc_proto)
+target_link_libraries(raftclient raft_grpc_proto)
+
 

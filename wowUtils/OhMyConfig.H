@@ -7,10 +7,13 @@
 #include <unordered_map>
 
 struct ServerInfo {
+    int id;
     std::string ip;
     int raft_port;
     int db_port;
     std::string name;
+
+    std::string str() const;
 };
 
 struct TokenizedOut {
@@ -82,6 +85,7 @@ inline std::vector<ServerInfo> ParseConfig(std::string filename)
             tokens.push_back(token);
         }
         ServerInfo server;
+        server.id = id;
         server.name = tokens[header["name"]];
         server.ip = tokens[header["intf_ip"]];
         server.raft_port = stoi(tokens[header["raft_port"]]);

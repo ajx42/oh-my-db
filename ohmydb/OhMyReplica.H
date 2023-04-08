@@ -33,6 +33,8 @@ public:
   // See ConsensusUtils for the struct definitions.
   raft::AppendEntriesRet AppendEntries( raft::AppendEntriesParams args );
   raft::RequestVoteRet RequestVote( raft::RequestVoteParams args ); 
+  raft::AddServerRet AddServer( raft::AddServerParams args );
+  raft::RemoveServerRet RemoveServer( raft::RemoveServerParams args );
 
   void start();
   void stop();
@@ -161,7 +163,7 @@ inline ohmydb::Ret ReplicaManager::get( int key )
   if ( ! isSubmitted ) {
     raft::PromiseStore<raft::RaftOp::res_t>::Instance()
      .getAndRemove( it );
-    std::string leaderAddr = raft_.getLastKnownLeaderAddr();
+    std::string leaderAddr = raft_.getLastKnownLeaderDBAddr();
     return { ohmydb::ErrorCode::NOT_LEADER, leaderAddr, -1 };
   }
 
@@ -192,7 +194,7 @@ inline ohmydb::Ret ReplicaManager::put( std::pair<int, int> kvp )
   if ( ! isSubmitted ) {
     raft::PromiseStore<raft::RaftOp::res_t>::Instance()
       .getAndRemove( it );
-    std::string leaderAddr = raft_.getLastKnownLeaderAddr();
+    std::string leaderAddr = raft_.getLastKnownLeaderDBAddr();
     return { ohmydb::ErrorCode::NOT_LEADER, leaderAddr, 0 };
   }
 
@@ -213,3 +215,12 @@ inline raft::RequestVoteRet ReplicaManager::RequestVote( raft::RequestVoteParams
   return raft_.RequestVote( args );
 }
 
+inline raft::AddServerRet ReplicaManager::AddServer( raft::AddServerParams args )
+{
+  return raft_.AddServer( args );
+}
+
+inline raft::RemoveServerRet ReplicaManager::RemoveServer( raft::RemoveServerParams args )
+{
+  return raft_.RemoveServer( args );
+}

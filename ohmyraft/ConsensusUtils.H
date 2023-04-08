@@ -11,19 +11,31 @@
 
 #include "PromiseStore.H"
 #include "ohmydb/LevelDBProxy.H"
+#include "OhMyConfig.H"
 
 namespace raft {
+enum ErrorCode: int32_t {
+  OK = 0,
+  NOT_LEADER = 1,
+  TIMEOUT = 2,
+  PREV_NOT_COMMITTED_TIMEOUT = 3,
+  CUR_NOT_COMMITTED_TIMEOUT = 4,
+  OTHER = 5
+};
 
 template <class KeyT, class ValT>
 struct Operation {
   using getarg_t = KeyT;
   using putarg_t = std::pair<KeyT, ValT>;
+  using addserverarg_t = ServerInfo;
+  using rmserverarg_t = int; //todo
   using getres_t = std::optional<ValT>;
   using putres_t = bool;
-  using arg_t = std::variant<getarg_t, putarg_t>;
+  // @TODO: How to remove duplicate type? (getarg_t and rmserverarg_t both int)
+  using arg_t = std::variant<getarg_t, putarg_t, addserverarg_t>;
   using res_t = std::variant<getres_t, putres_t>;
   
-  enum OpType : int32_t { GET = 0, PUT = 1, NOOP = 2 };
+  enum OpType : int32_t { GET = 0, PUT = 1, ADD_SERVER = 2, REMOVE_SERVER = 3 };
 
   OpType kind;
   arg_t args;
@@ -45,8 +57,14 @@ struct Operation {
     } else if ( kind == PUT ) {
       res = LevelDB<KeyT, ValT>::Instance().put(
               std::get<putarg_t>( args ) );
-    } else {
+    } else if ( kind == ADD_SERVER ) {
       res = true;
+    } else if ( kind == REMOVE_SERVER ) {
+      res = true;
+    } else {
+      std::cout << "Unknown operation kind: " << kind << std::endl;
+      abort();
+      return;
     }
 
     if ( promiseHandle.has_value() ) {
@@ -69,9 +87,16 @@ struct Operation {
       promise.set_value({}); // get failed
     } else if ( kind == PUT ) {
       promise.set_value( false ); // put failed
-    } else { // NOOP failed
+    } else if ( kind == ADD_SERVER ) {
       promise.set_value( false );
+    } else if ( kind == REMOVE_SERVER ) {
+      promise.set_value( false );
+    } else {
+      std::cout << "Unknown operation kind: " << kind << std::endl;
+      abort();
+      return;
     }
+
     promiseHandle.reset();
   }
 
@@ -83,9 +108,14 @@ struct Operation {
     } else if ( kind == PUT ) {
       auto putarg = std::get<putarg_t>( args );
       oss << "PUT(" << putarg.first << ", " << putarg.second << ") ";
+    } else if ( kind == ADD_SERVER ) {
+      oss << "ADD_SERVER(" << std::get<addserverarg_t>( args ).ip << ") ";
+    } else if ( kind == REMOVE_SERVER ) {
+      oss << "REMOVE_SERVER(" << ") ";
     } else {
-      oss << "NOOP ";
+      oss << "UNKNOWN_OP(" << kind << ") ";
     }
+
     oss << "HasPromise=" << promiseHandle.has_value() << " ]";
     return oss.str();
   }
@@ -220,6 +250,70 @@ inline std::string RequestVoteRet::str() const {
   ss  << "RequestVoteRet=["
       << "Term=" << term << " "
       << "VoteGranted=" << voteGranted << "]";
+  return ss.str();
+}
+
+struct AddServerParams {
+  int serverId;
+  std::string ip;
+  int raftPort;
+  int dbPort;
+  std::string name;
+
+  std::string str() const;
+};
+
+inline std::string AddServerParams::str() const {
+  std::stringstream ss;
+  ss  << "AddServerParams=["
+      << "ServerId=" << serverId << " "
+      << "IP=" << ip << " "
+      << "RaftPort=" << raftPort << " "
+      << "DBPort=" << dbPort << " "
+      << "Name=" << name << "]";
+  return ss.str();
+}
+
+struct AddServerRet {
+  raft::ErrorCode errorCode;
+  std::string leaderAddr;
+
+  std::string str() const;
+};
+
+inline std::string AddServerRet::str() const {
+  std::stringstream ss;
+  ss  << "AddServerRet=["
+      << "ErrorCode=" << errorCode << " "
+      << "LeaderAddr=" << leaderAddr << "]";
+  return ss.str();
+}
+
+struct RemoveServerParams {
+  int serverId;
+
+  std::string str() const;
+};
+
+inline std::string RemoveServerParams::str() const {
+  std::stringstream ss;
+  ss  << "RemoveServerParams=["
+      << "ServerId=" << serverId << "]";
+  return ss.str();
+}
+
+struct RemoveServerRet {
+  raft::ErrorCode errorCode;
+  std::string leaderAddr;
+
+  std::string str() const;
+};
+
+inline std::string RemoveServerRet::str() const {
+  std::stringstream ss;
+  ss  << "RemoveServerRet=["
+      << "ErrorCode=" << errorCode << " "
+      << "LeaderAddr=" << leaderAddr << "]";
   return ss.str();
 }
 
