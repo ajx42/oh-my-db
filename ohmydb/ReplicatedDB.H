@@ -12,7 +12,7 @@ namespace ohmydb {
 
 class ReplicatedDB {
 public:
-  ReplicatedDB( std::string serverAddr, std::vector<ServerInfo> serverInfo);
+  ReplicatedDB(std::vector<ServerInfo> serverInfo);
 
   std::optional<int32_t> get( int32_t key );
   bool put( std::pair<int32_t, int32_t> kvp );
@@ -21,14 +21,13 @@ private:
   static constexpr const int32_t MAX_TRIES = 1000;
   OhMyDBClient client_;
   std::string serverAddr_;
-  std::vector<ServerInfo> serverInfo;
+  std::vector<ServerInfo> serverInfo_;
   void updateChannel(std::string serverAddr);
 
 };
 
-inline ReplicatedDB::ReplicatedDB( std::string serverAddr, std::vector<ServerInfo> serverInfo )
-  : client_( grpc::CreateChannel( serverAddr, grpc::InsecureChannelCredentials() ) )
-  , serverAddr_( serverAddr )
+inline ReplicatedDB::ReplicatedDB( std::vector<ServerInfo> serverInfo )
+  : client_( grpc::CreateChannel( serverInfo[0].ip + ":" + std::to_string(serverInfo[0].db_port), grpc::InsecureChannelCredentials() ) )
 , serverInfo_( serverInfo )
 { }
 
@@ -51,10 +50,10 @@ inline std::optional<int32_t> ReplicatedDB::get( int32_t key )
     //Either failed to connect to server, or its not the leader. Try another server.
     if ( ! retOpt.has_value() || retOpt.value().errorCode == ErrorCode::NOT_LEADER) {
       LogError( "Failed to connect to DB server: RPC Failed, contacting other servers." );
-      auto serverAddr = serverInfo[backupID].ip + ":" + std::to_string(serverInfo[backupID].db_port);
+      auto serverAddr = serverInfo_[backupID].ip + ":" + std::to_string(serverInfo_[backupID].db_port);
       updateChannel(serverAddr);
       backupID++;
-      if(backupID >= serverInfo.size())
+      if(backupID >= serverInfo_.size())
       {
           backupID = 0;
       }
@@ -91,10 +90,10 @@ inline bool ReplicatedDB::put( std::pair<int32_t, int32_t> kvp )
     //Either failed to connect to server, or its not the leader. Try another server.
     if ( ! retOpt.has_value() || retOpt.value().errorCode == ErrorCode::NOT_LEADER) {
       LogError( "Failed to connect to DB server: RPC Failed, contacting other servers." );
-      auto serverAddr = serverInfo[backupID].ip + ":" + std::to_string(serverInfo[backupID].db_port);
+      auto serverAddr = serverInfo_[backupID].ip + ":" + std::to_string(serverInfo_[backupID].db_port);
       updateChannel(serverAddr);
       backupID++;
-      if(backupID >= serverInfo.size())
+      if(backupID >= serverInfo_.size())
       {
           backupID = 0;
       }

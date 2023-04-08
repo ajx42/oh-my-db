@@ -8,7 +8,7 @@ start_test()
     id=$4
 
     ssh ${SSH_HOST} << EOF
-    ./oh-my-db/build/ohmyserver/client --config ./config.csv --iter $2 --numkeys $3 --id $4
+    ./oh-my-db/build/ohmyserver/client --config ./config.csv --iter $2 --numkeys $3
 EOF
 }
 

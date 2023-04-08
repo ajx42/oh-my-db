@@ -106,9 +106,9 @@ int main(int argc, char **argv)
         .default_value("10")
         .help("Number of possible keys for testing.");
 
-    program.add_argument("--id")
-        .default_value("0")
-        .help("Initial node to contact.");
+    //program.add_argument("--id")
+    //    .default_value("0")
+    //    .help("Initial node to contact.");
 
     try {
         program.parse_args( argc, argv );
@@ -121,17 +121,14 @@ int main(int argc, char **argv)
 
 
     // parse arguments
+    //auto id = std::stoi(program.get<std::string>("--id"));
     auto configPath = program.get<std::string>("--config");
-    auto id = std::stoi(program.get<std::string>("--id"));
     auto iter = std::stoi(program.get<std::string>("--iter"));
     auto numPairs = std::stoi(program.get<std::string>("--numkeys"));
 
     auto servers = ParseConfig(configPath);
-    auto serverAddr = servers[id].ip + ":" + std::to_string(servers[id].db_port);
 
-    LogInfo("Client: Starting contact on " + serverAddr);
-
-    auto repDB = ohmydb::ReplicatedDB(serverAddr, servers);
+    auto repDB = ohmydb::ReplicatedDB(servers);
     writeTest(repDB, numPairs, 1lu<<iter);
     readTest(repDB, numPairs, 1lu<<iter);
     readWriteTest(repDB, numPairs, 1lu<<iter);
