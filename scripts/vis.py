@@ -87,12 +87,10 @@ def parseLoadLog(inFile, nodeName):
 	with open(inFile) as f:
 		for l in f.readlines():
 			l = l.replace(',', '')
-			loadEntry = LoadData()
 			timeList.append(convert_to_seconds(l.split(' ')[1]))
 			load1mList.append(float(l.split(' ')[2]))
 			load5mList.append(float(l.split(' ')[3]))
 			load15mList.append(float(l.split(' ')[4]))
-			#data.append(loadEntry)
 
 	return pd.DataFrame(
 		dict(
@@ -104,19 +102,51 @@ def parseLoadLog(inFile, nodeName):
 		)
 	)
 
+def parseMemLog(inFile, nodeName):
+	timeList = []
+	totalList = []
+	usedList = []
+	freeList = []
+	sharedList = []
+	buffCacheList = []
+	availableList = []
 
-def graphLoad(data):
+	with open(inFile) as f:
+		for l in f.readlines():
+			timeList.append(convert_to_seconds(l.split(' ')[1]))
+			totalList.append(int(l.split(' ')[2]))
+			usedList.append(int(l.split(' ')[3]))
+			freeList.append(int(l.split(' ')[4]))
+			sharedList.append(int(l.split(' ')[5]))
+			buffCacheList.append(int(l.split(' ')[6]))
+			availableList.append(int(l.split(' ')[7]))
 
-	grouped_load = data.groupby('node')
+	return pd.DataFrame(
+		dict(
+			node=nodeName,
+			time=timeList,
+			total=totalList,
+			used=usedList,
+			free=freeList,
+			shared=sharedList,
+			buffCache=buffCacheList,
+			available=availableList,
+		)
+	)
+
+
+def graphData(data, groupField, xField, yField, xLabel, yLabel, title=""):
+	grouped_mem = data.groupby(groupField)
 
 	fig, ax = plt.subplots()
 
-	for group_name, group_df in grouped_load:
-		ax.plot(group_df['time'], group_df['load1m'], label=group_name)
+	for group_name, group_df in grouped_mem:
+		ax.plot(group_df[xField], group_df[yField], label=group_name)
 
 	ax.legend()
-	ax.set_xlabel("Time (s)")
-	ax.set_ylabel("Unix System Load")
+	ax.set_xlabel(xLabel)
+	ax.set_ylabel(yLabel)
+	ax.set_title(title)
 	plt.show()
 
 
@@ -124,6 +154,7 @@ def main(inFile):
 
 	data = {}
 	loadData = []
+	memData = []
 
 	#Fill dict with test results
 	for root, dirs, files in os.walk(inFile):
@@ -135,14 +166,16 @@ def main(inFile):
 				data[nodeName] = {}
 
 			if filename == "load.log.dat":
-				#data[nodeName]["load"] = parseLoadLog(os.path.join(root, filename), nodeName)
-			 loadData.append(parseLoadLog(os.path.join(root, filename), nodeName))
-	#with open(inFile) as f:
-	#	data = extractData(f)
+				loadData.append(parseLoadLog(os.path.join(root, filename), nodeName))
+
+			elif filename == "mem.log.dat":
+				memData.append(parseMemLog(os.path.join(root, filename), nodeName))
 
 	combined_load = pd.concat(loadData, ignore_index=True)
+	combined_mem = pd.concat(memData, ignore_index=True)
 
-	graphLoad(combined_load)
+	graphData(combined_mem, "node", "time", "used", "Time (s)", "Memory Usage (MB)", "Node Memory Usage (MB)")
+	graphData(combined_load, "node", "time", "load1m", "Time (s)", "Unix System Load (1 Minute Avg)", "Node System Load")
 
 
 if __name__ == "__main__":
