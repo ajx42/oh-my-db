@@ -29,9 +29,8 @@ private:
 inline ReplicatedDB::ReplicatedDB( std::string serverAddr, std::vector<ServerInfo> serverInfo )
   : client_( grpc::CreateChannel( serverAddr, grpc::InsecureChannelCredentials() ) )
   , serverAddr_( serverAddr )
-{ 
-    this->serverInfo = serverInfo;
-}
+, serverInfo_( serverInfo )
+{ }
 
 //Update the server we are connecting to for RPC
 void ReplicatedDB::updateChannel(std::string serverAddr)
