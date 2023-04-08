@@ -19,8 +19,7 @@ public:
   // and connect to peers as well. waitForPeers makes the replica ping each
   // peer before starting operation. This should be used for testing only!
   void initialiseServices(
-      std::vector<ServerInfo> servers, int id, bool waitForPeers,
-      std::string dbPath, bool enableBootstrap, std::string storeDir );
+      std::vector<ServerInfo> servers, int id, bool waitForPeers, std::string dbPath ); 
 
   // These methods are accessed by the Database RPC server layer. But exposing
   // them as public methods here allows for quick testing :D
@@ -55,11 +54,8 @@ private:
 };
 
 inline void ReplicaManager::initialiseServices(
-    std::vector<ServerInfo> servers, int id, bool waitForPeers,
-    std::string dbPath, bool enableBootstrap, std::string storeDir )
+    std::vector<ServerInfo> servers, int id, bool waitForPeers, std::string dbPath )
 {
-  raft_.bootstrap( id, enableBootstrap, storeDir );
-
   servers_ = servers;
   auto raftPort = servers_[id].raft_port;
   auto raftIp = servers_[id].ip;
@@ -97,6 +93,7 @@ inline void ReplicaManager::initialiseServices(
     size_t activePeers = 1; // myself
     for ( auto& [i, peer]: peers ) {
       if ( peer->Ping(1) > 0 ) {
+        LogInfo( "ping OK: " + std::to_string(i) );
         ++activePeers;
       }
     }
@@ -106,7 +103,7 @@ inline void ReplicaManager::initialiseServices(
     std::this_thread::sleep_for( std::chrono::seconds( 1 ) );
   }
 
-  raft_.initialiseConnections( std::move(peers) );
+  raft_.initialiseConnections( id, std::move(peers) );
   LogInfo( "Services Started: Raft Initialised" );
 
   // start Database RPC server
@@ -153,8 +150,7 @@ inline ohmydb::Ret ReplicaManager::get( int key )
   if ( ! isSubmitted ) {
     raft::PromiseStore<raft::RaftOp::res_t>::Instance()
      .getAndRemove( it );
-    std::string leaderAddr = servers_[leaderId].ip + ":" +
-                             std::to_string(servers_[leaderId].db_port);
+    std::string leaderAddr = servers_[leaderId].ip + ":" + std::to_string(servers_[leaderId].db_port);
     return { ohmydb::ErrorCode::NOT_LEADER, leaderAddr, -1 };
   }
 
