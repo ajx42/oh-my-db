@@ -17,10 +17,11 @@ namespace raft {
 enum ErrorCode: int32_t {
   OK = 0,
   NOT_LEADER = 1,
-  TIMEOUT = 2,
-  PREV_NOT_COMMITTED_TIMEOUT = 3,
-  CUR_NOT_COMMITTED_TIMEOUT = 4,
-  OTHER = 5
+  PREV_NOT_COMMITTED_TIMEOUT = 2,
+  CUR_NOT_COMMITTED_TIMEOUT = 3,
+  SERVER_EXISTS = 4,    // for add server
+  SERVER_NOT_FOUND = 5, // for remove server
+  OTHER = 6
 };
 
 template <class KeyT, class ValT>

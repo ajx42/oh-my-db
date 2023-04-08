@@ -621,6 +621,16 @@ AddServerRet RaftManager<T>::AddServer( AddServerParams args)
     return ret;
   }
   int serverId = args.serverId;
+
+  // check if server exist
+  if ( state_.ClusterConfig.find(serverId) != state_.ClusterConfig.end() ) {
+    ret.errorCode = raft::ErrorCode::SERVER_EXISTS;
+    ret.leaderAddr = getLastKnownLeaderRaftAddr();
+    LogInfo("Server exists, returning " + ret.str());
+    return ret;
+  }
+
+
   ServerInfo info = {
     .id = serverId,
     .raft_port = args.raftPort,
@@ -721,6 +731,14 @@ RemoveServerRet RaftManager<T>::RemoveServer( RemoveServerParams args)
   }
 
   int serverId = args.serverId;
+
+  // check if server exists
+  if ( state_.ClusterConfig.find( serverId ) == state_.ClusterConfig.end() ) {
+    ret.errorCode = raft::ErrorCode::SERVER_NOT_FOUND;
+    ret.leaderAddr = getLastKnownLeaderRaftAddr();
+    LogInfo("Server not found, returning " + ret.str());
+    return ret;
+  }
 
   // wait until previous config change is commited
   int retryCount = 0;
