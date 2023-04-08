@@ -8,6 +8,7 @@ start_replica()
     ssh ${SSH_HOST} << EOF
     killall monitor.sh
     killall replica
+    killall client 
     rm -rf /tmp/db
 EOF
 
