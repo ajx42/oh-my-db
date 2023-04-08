@@ -60,7 +60,14 @@ int main(int argc, char **argv)
         std::cout << ret.value().str() << std::endl;
     } else {
         std::cout << "NOT_FOUND" << std::endl;
+        return 0;
     }
+    
+    // sleep for a bit
+    std::cout << "Sleeping for 15 seconds" << std::endl;
+    std::this_thread::sleep_for(std::chrono::seconds(15));
+
+    auto ret2 = raftClient.AddServer( params );
     
     return 0;
 }

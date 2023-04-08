@@ -23,14 +23,23 @@ grpc::Status RaftService::AppendEntries(
 
   for ( size_t i = 0; i < request->entries().size(); i += sizeof(raft::TransportEntry) ) {
     auto& entry = *reinterpret_cast<const raft::TransportEntry*>( request->entries().data() + i );
+    raft::RaftOp::arg_t args;
+    if ( entry.kind == raft::RaftOp::GET ) {
+      args = raft::RaftOp::arg_t(entry.arg1);
+    } else if ( entry.kind == raft::RaftOp::PUT ) {
+      args = raft::RaftOp::arg_t(std::make_pair( entry.arg1, entry.arg2 ));
+    } else if ( entry.kind == raft::RaftOp::ADD_SERVER ) {
+      args = raft::RaftOp::arg_t(entry.serverInfo);
+    } else {
+      args = raft::RaftOp::arg_t(entry.arg1);
+    }
+
     param.entries.push_back({ 
       .term = entry.term,
       .index = entry.index,
       .op = raft::RaftOp {
         .kind = entry.kind,
-        .args = entry.kind == raft::RaftOp::GET
-              ? raft::RaftOp::arg_t(entry.arg1)
-              : raft::RaftOp::arg_t(std::make_pair( entry.arg1, entry.arg2 )),
+        .args = args,
         .promiseHandle = {}
       }
     });
@@ -121,12 +130,27 @@ RaftClient::AppendEntries( raft::AppendEntriesParams args )
   std::vector<raft::TransportEntry> entriesToShip;
   for ( auto entry: args.entries ) {
     auto& op = entry.op;
+    int32_t arg1;
+    int32_t arg2;
+    ServerInfo serverInfo;
+    if ( op.kind == raft::RaftOp::GET ) {
+      arg1 = std::get<raft::RaftOp::getarg_t>( op.args );
+    } else if ( op.kind == raft::RaftOp::PUT ) {
+      arg1 = std::get<raft::RaftOp::putarg_t>( op.args ).first;
+      arg2 = std::get<raft::RaftOp::putarg_t>( op.args ).second;
+    } else if ( op.kind == raft::RaftOp::ADD_SERVER ) {
+      serverInfo = std::get<raft::RaftOp::addserverarg_t>( op.args );
+    } else {
+      arg1 = std::get<raft::RaftOp::getarg_t>( op.args );
+    }
+
     entriesToShip.push_back( raft::TransportEntry {
       .term = entry.term,
       .index = entry.index,
       .kind = op.kind,
-      .arg1 = op.kind == raft::RaftOp::GET ? std::get<raft::RaftOp::getarg_t>( op.args ) : std::get<raft::RaftOp::putarg_t>( op.args ).first,
-      .arg2 = op.kind == raft::RaftOp::GET ? 0 : std::get<raft::RaftOp::putarg_t>( op.args ).second
+      .arg1 = arg1,
+      .arg2 = arg2,
+      .serverInfo = serverInfo
     });
   }
   std::string toSend( reinterpret_cast<const char*>( entriesToShip.data() ), entriesToShip.size() * sizeof(raft::TransportEntry) );

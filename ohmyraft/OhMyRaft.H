@@ -147,6 +147,7 @@ private:
   void becomeLeader();
   void becomeFollower(int32_t term);
   void becomeCandidate(int32_t term);
+  void becomeDead();
   void runLeaderOneIter();
 
 
@@ -157,7 +158,7 @@ private:
 template <class T>
 void RaftManager<T>::addPeer( int32_t peerId, std::unique_ptr<T>&& rpcClient )
 {
-  std::unique_lock stateLock { state_.Mut };
+  std::unique_lock<std::mutex> lock( state_.Mut );
   state_.NextIndex[peerId] = 0;
   state_.MatchIndex[peerId] = -1;
   peers_[peerId] = std::move(rpcClient);
@@ -166,7 +167,7 @@ void RaftManager<T>::addPeer( int32_t peerId, std::unique_ptr<T>&& rpcClient )
 template <class T>
 void RaftManager<T>::removePeer( int32_t peerId )
 {
-  std::unique_lock stateLock { state_.Mut };
+  std::unique_lock<std::mutex> lock( state_.Mut );
   state_.ClusterConfig.erase( peerId );
   if ( id_ != peerId ) 
   {
@@ -179,7 +180,6 @@ void RaftManager<T>::removePeer( int32_t peerId )
 template <class T>
 void RaftManager<T>::setClusterConfig( std::map<int32_t, ServerInfo> config )
 {
-  std::unique_lock stateLock { state_.Mut };
   state_.ClusterConfig = config;
 }
 
@@ -253,6 +253,8 @@ void RaftManager<T>::runLeaderOneIter()
         prevLogTerm = state_.Logs[prevLogIndex].term;
       }
       for ( size_t i = nextIndex; i < state_.Logs.size(); ++i ) {
+        LogInfo("Sending entry " + std::to_string(i) + " to peer " + std::to_string(id) );
+        LogInfo("It has operation" + state_.Logs[i].op.str() );
         args.entries.push_back({
           .term = state_.Logs[i].term,
           .index = static_cast<int32_t>(i),
@@ -302,6 +304,8 @@ void RaftManager<T>::runLeaderOneIter()
                   matchCount++;
                 }
               }
+              LogInfo("MatchCount=" + std::to_string( matchCount ) + " for index=" + std::to_string( i ));
+              LogInfo("ClusterConfig.size()=" + std::to_string( state_.ClusterConfig.size() ));
               if ( matchCount * 2 > state_.ClusterConfig.size() ) {
                 state_.CommitIndex = i;
               }
@@ -316,6 +320,7 @@ void RaftManager<T>::runLeaderOneIter()
                    state_.Logs[i].op.kind == RaftOp::OpType::REMOVE_SERVER ) 
               {
                 state_.LastConfigChangeCommitted = true;
+                LogInfo("LastConfigChangeCommitted = true" );
               }
             }
             state_.LastApplied = state_.CommitIndex;
@@ -460,7 +465,7 @@ RaftManager<T>::~RaftManager()
 template <class T>
 AppendEntriesRet RaftManager<T>::AppendEntries( AppendEntriesParams args )
 {
-  std::lock_guard<std::mutex> lock(state_.Mut);
+  std::unique_lock<std::mutex> lock(state_.Mut);
   state_.ElectionResetEvent = std::chrono::system_clock::now();
   
   if ( state_.Role == RaftRole::Dead ) {
@@ -512,14 +517,26 @@ AppendEntriesRet RaftManager<T>::AppendEntries( AppendEntriesParams args )
           });
           // apply config change
           if ( args.entries[i].op.kind ==  RaftOp::OpType::ADD_SERVER ) {
+            LogInfo( "Got add server: " + args.entries[i].op.str() );
             ServerInfo info = std::get<RaftOp::addserverarg_t>(args.entries[i].op.args);
             std::string addr = info.ip + ":" + std::to_string(info.raft_port);
+            lock.unlock();
             addPeer( info.id, 
                     std::make_unique<T>(grpc::CreateChannel(addr, grpc::InsecureChannelCredentials())));
+            lock.lock();
           } else if ( args.entries[i].op.kind ==  RaftOp::OpType::REMOVE_SERVER ) {
+            LogInfo( "Got remove server: " + args.entries[i].op.str() );
+            lock.unlock();
             removePeer( std::get<RaftOp::rmserverarg_t>(args.entries[i].op.args) ); // @todo
-            // should we just bring down the server
-            keepRunning_ = false;
+            lock.lock();
+            if ( std::get<RaftOp::rmserverarg_t>(args.entries[i].op.args) == id_ ) {
+              LogInfo( "I'm gonna be dead" );
+              becomeDead();
+              reply.success = false; // otherwise will be counted as majority
+              reply.term = state_.CurrentTerm;
+              return reply;
+            }
+            LogInfo( "I'm still alive" );
           }
 
           if ( (int32_t)state_.Logs.size() - 1 != args.entries[i].index ) {
@@ -597,13 +614,10 @@ AddServerRet RaftManager<T>::AddServer( AddServerParams args)
 
   if ( state_.Role != RaftRole::Leader ) {
     ret.errorCode = raft::ErrorCode::NOT_LEADER;
-    stateLock.unlock();
     ret.leaderAddr = getLastKnownLeaderRaftAddr();
     LogInfo("Not leader, returning " + ret.str());
     return ret;
   }
-  stateLock.unlock();
-
   int serverId = args.serverId;
   ServerInfo info = {
     .id = serverId,
@@ -622,7 +636,6 @@ AddServerRet RaftManager<T>::AddServer( AddServerParams args)
   while (1) {
     stateLock.lock();
     if ( state_.LastConfigChangeCommitted ) {
-      stateLock.unlock();
       break;
     }
     stateLock.unlock();
@@ -640,6 +653,16 @@ AddServerRet RaftManager<T>::AddServer( AddServerParams args)
     LogInfo("Waiting for previous config change to be commited");
   }
 
+  state_.LastConfigChangeCommitted = false;
+
+  // change state first, for safety
+  state_.ClusterConfig[serverId] = info;
+  state_.LastConfigChangeCommitted = false;
+  stateLock.unlock();
+  addPeer( serverId, std::make_unique<T>(grpc::CreateChannel(
+        serverAddr, grpc::InsecureChannelCredentials())) );
+  state_.persist();
+
   std::promise<raft::RaftOp::res_t> pr;
   auto ft = pr.get_future();
   auto it = raft::PromiseStore<raft::RaftOp::res_t>::Instance()
@@ -650,8 +673,10 @@ AddServerRet RaftManager<T>::AddServer( AddServerParams args)
     .promiseHandle = { it }
   };
 
+  LogInfo("About to submit");
   auto [ isSubmitted, leaderId ] = submit( op );
   if ( ! isSubmitted ) {
+    LogInfo("Submit failed");
     raft::PromiseStore<raft::RaftOp::res_t>::Instance()
      .getAndRemove( it );
     ret.errorCode = raft::ErrorCode::OTHER;
@@ -659,27 +684,17 @@ AddServerRet RaftManager<T>::AddServer( AddServerParams args)
     return ret;
   }
 
-  std::get<bool>( ft.get() ); // don't need the value
-  // now the config entry is definitely in log
-  // update my config
-  stateLock.lock();
-  state_.ClusterConfig[serverId] = info;
-  state_.LastConfigChangeCommitted = false;
-  addPeer( serverId, std::make_unique<T>(grpc::CreateChannel(
-        serverAddr, grpc::InsecureChannelCredentials())) );
-  stateLock.unlock();
-  state_.persist();
+  LogInfo("Wait for getting");
+  bool res = std::get<bool>( ft.get() ); // don't need the value
 
   // wait until it is committed
+  LogInfo("Let's wait until it is committed");
   retryCount = 0;
   while (1) 
   {
-    stateLock.lock();
     if ( state_.LastConfigChangeCommitted ) {
-      stateLock.unlock();
       break;
     }
-    stateLock.unlock();
 
     retryCount++;
     LogInfo("Waiting for config change to be commited");
@@ -708,25 +723,22 @@ RemoveServerRet RaftManager<T>::RemoveServer( RemoveServerParams args)
   RemoveServerRet ret;
 
   if ( state_.Role != RaftRole::Leader ) {
-    stateLock.unlock();
     ret.errorCode = raft::ErrorCode::NOT_LEADER;
     ret.leaderAddr = getLastKnownLeaderRaftAddr();
     LogInfo("Not leader, returning " + ret.str());
     return ret;
   }
-  stateLock.unlock();
 
   int serverId = args.serverId;
 
   // wait until previous config change is commited
   int retryCount = 0;
+  stateLock.unlock();
   while (1) {
-    stateLock.lock();
+    LogInfo("Waiting for previous config change to be commited")
     if ( state_.LastConfigChangeCommitted ) {
-      stateLock.unlock();
       break;
     }
-    stateLock.unlock();
 
     retryCount++;
     if ( retryCount == 10 ) 
@@ -740,18 +752,24 @@ RemoveServerRet RaftManager<T>::RemoveServer( RemoveServerParams args)
     std::this_thread::sleep_for( std::chrono::milliseconds(100) );
     LogInfo("Waiting for previous config change to be commited");
   }
+  LogInfo("Previous config change commited");
+  stateLock.lock();
+
+  state_.LastConfigChangeCommitted = false;
+  state_.persist();
 
   std::promise<raft::RaftOp::res_t> pr;
   auto ft = pr.get_future();
   auto it = raft::PromiseStore<raft::RaftOp::res_t>::Instance()
               .insert( std::move( pr ) );
   raft::RaftOp op {
-    .kind = raft::RaftOp::ADD_SERVER,
+    .kind = raft::RaftOp::REMOVE_SERVER,
     .args = args.serverId,
     .promiseHandle = { it }
   };
 
   LogInfo("About to submit");
+  stateLock.unlock();
   auto [ isSubmitted, leaderId ] = submit( op );
   if ( ! isSubmitted ) {
     LogInfo("Submit failed");
@@ -769,9 +787,8 @@ RemoveServerRet RaftManager<T>::RemoveServer( RemoveServerParams args)
   LogInfo("Log is in! removing peer");
   stateLock.lock();
   state_.ClusterConfig.erase(serverId);
-  state_.LastConfigChangeCommitted = false;
-  removePeer( serverId );
   stateLock.unlock();
+  removePeer( serverId );
   state_.persist();
 
   // wait until it is committed
@@ -781,7 +798,6 @@ RemoveServerRet RaftManager<T>::RemoveServer( RemoveServerParams args)
   {
     stateLock.lock();
     if ( state_.LastConfigChangeCommitted ) {
-      stateLock.unlock();
       break;
     }
     stateLock.unlock();
@@ -805,11 +821,7 @@ RemoveServerRet RaftManager<T>::RemoveServer( RemoveServerParams args)
 
   // fork a thread to remove the server
   if ( serverId == id_ ) {
-    LogInfo("I am the server to be removed, exiting");
-    std::thread( [this] {
-      std::this_thread::sleep_for( std::chrono::seconds(1) );
-      keepRunning_ = false;
-    }).detach();
+    becomeDead();
   }
 
   return ret;
@@ -854,6 +866,16 @@ void RaftManager<T>::becomeLeader()
     state_.MatchIndex[id] = -1;
   }
   state_.persist();
+}
+
+template <class T>
+void RaftManager<T>::becomeDead()
+{
+  LogInfo("Becoming Dead");
+  state_.Role = RaftRole::Dead;
+  state_.persist();
+  keepRunning_ = false;
+  LogInfo("I'm dead. No one loves me.");
 }
 // -- end of role transition helpers
 

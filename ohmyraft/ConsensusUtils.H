@@ -111,7 +111,7 @@ struct Operation {
     } else if ( kind == ADD_SERVER ) {
       oss << "ADD_SERVER(" << std::get<addserverarg_t>( args ).ip << ") ";
     } else if ( kind == REMOVE_SERVER ) {
-      oss << "REMOVE_SERVER(" << ") ";
+      oss << "REMOVE_SERVER(" << std::get<rmserverarg_t>( args ) << ") ";
     } else {
       oss << "UNKNOWN_OP(" << kind << ") ";
     }
@@ -148,6 +148,7 @@ struct TransportEntry {
   RaftOp::OpType kind;
   int32_t arg1;
   int32_t arg2;
+  ServerInfo serverInfo;
 } __attribute__((__packed__));
 
 enum class Role 
