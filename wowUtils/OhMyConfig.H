@@ -56,7 +56,7 @@ inline TokenizedOut TokenizeCSV( std::string filename )
   return ret;
 }
 
-inline std::vector<ServerInfo> ParseConfig(std::string filename)
+inline std::map<int32_t, ServerInfo> ParseConfig(std::string filename)
 {
     std::map<int32_t, ServerInfo> servers;
     std::ifstream file(filename);

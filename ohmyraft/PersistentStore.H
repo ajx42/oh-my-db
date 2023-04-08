@@ -1,9 +1,5 @@
 #pragma once
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 11d0b56 (atomic file writes and configurable store)
 #include <string>
 #include <functional>
 #include <vector>
