@@ -258,13 +258,14 @@ void RaftManager<T>::runLeaderOneIter()
         }
       }
     });
-    threadHandles.push_back(th);
+    //threadHandles.push_back(th);
+    th->detach();
   }
 
-  for ( auto& th : threadHandles) {
-      th->join();
-      delete th;
-  }
+  //for ( auto& th : threadHandles) {
+  //    th->join();
+  //    delete th;
+  //}
 }
 
 template <class T>
@@ -287,7 +288,7 @@ void RaftManager<T>::raftImpl()
     }
 
     // sleep for a while
-    //std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
    
     // prepare to receive more
     raftIn_.clear();
