@@ -73,7 +73,6 @@ int32_t RaftClient::Ping(int32_t cmd)
     auto status = stub_->TestCall(&context, request, &response);
     if (status.ok())
     {
-        LogInfo( "Received OK" );
         return response.ok();
     }
     else

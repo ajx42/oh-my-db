@@ -85,7 +85,7 @@ struct Operation {
 
   ~Operation() {
   }
-};
+} __attribute__((__packed__));
 
 // We are only going to care for these int int KVP ops
 using RaftOp = Operation<int, int>;
@@ -93,7 +93,17 @@ using RaftOp = Operation<int, int>;
 struct LogEntry {
   int term;
   RaftOp op;
-};
+  std::string str() const;
+} __attribute__((__packed__));
+
+inline std::string LogEntry::str() const
+{
+  std::stringstream ss;
+  ss  << "LogEntry=["
+      << "Term=" << term << " "
+      << "Op=" << op.str() << "]";
+  return ss.str();
+}
 
 struct TransportEntry {
   int32_t term;
@@ -178,10 +188,10 @@ struct RequestVoteParams {
   int lastLogIndex;
   int lastLogTerm;
 
-  std::string str();
+  std::string str() const;
 };
 
-inline std::string RequestVoteParams::str() {
+inline std::string RequestVoteParams::str() const {
   std::stringstream ss;
   ss  << "RequestVoteParams=["
       << "CandidateId=" << candidateId << " "
@@ -195,10 +205,10 @@ struct RequestVoteRet {
   int term;
   bool voteGranted;
   
-  std::string str();  
+  std::string str() const;  
 };
 
-inline std::string RequestVoteRet::str() {
+inline std::string RequestVoteRet::str() const {
   std::stringstream ss;
   ss  << "RequestVoteRet=["
       << "Term=" << term << " "
