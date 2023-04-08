@@ -13,7 +13,7 @@ start_replica()
 
     mkdir $resultsDir/$SSH_HOST
 
-    scp ${SSH_HOST}:~/oh-my-db/*.log $resultsDir/$SSH_HOST
+    scp ${SSH_HOST}:~/oh-my-db/*.log.dat $resultsDir/$SSH_HOST
 }
 
 parse_ssh_hosts()

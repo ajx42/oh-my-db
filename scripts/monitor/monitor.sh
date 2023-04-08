@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # Run mem.sh and load.sh in background
-./scripts/monitor/mem.sh >> mem.log &
+./scripts/monitor/mem.sh >> mem.log.dat &
 PID_MEM=$!
 
-./scripts/monitor/load.sh >> load.log &
+./scripts/monitor/load.sh >> load.log.dat &
 PID_LOAD=$!
 
-./scripts/monitor/net.sh >> net.log &
+./scripts/monitor/net.sh >> net.log.dat &
 PID_NET=$!
 
 # Trap SIGINT signal (Ctrl-C) and kill background processes
