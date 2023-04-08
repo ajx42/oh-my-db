@@ -131,7 +131,7 @@ int main(int argc, char **argv)
 
     LogInfo("Client: Starting contact on " + serverAddr);
 
-    auto repDB = ohmydb::ReplicatedDB(serverAddr);
+    auto repDB = ohmydb::ReplicatedDB(serverAddr, servers);
     writeTest(repDB, numPairs, 1lu<<iter);
     readTest(repDB, numPairs, 1lu<<iter);
     readWriteTest(repDB, numPairs, 1lu<<iter);
