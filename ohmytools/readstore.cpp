@@ -1,5 +1,3 @@
-#pragma once
-
 #include <string>
 
 #include <argparse/argparse.hpp>
