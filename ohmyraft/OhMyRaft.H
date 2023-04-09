@@ -409,7 +409,6 @@ void RaftManager<T>::bootstrap( int32_t myId, bool withBootstrap, std::string st
 
   state_.pStore.setup( storeFilePrefix );
   
-  // @TODO: Deal with ClusterConfig
   if ( withBootstrap ) {
     state_.VotedFor = state_.pStore.load( "VotedFor", -1 );
     state_.CurrentTerm = state_.pStore.load( "CurrentTerm", 0 );

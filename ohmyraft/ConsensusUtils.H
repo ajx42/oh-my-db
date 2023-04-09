@@ -49,23 +49,34 @@ struct Operation {
   }
 
   void execute() {
-    std::cout << "EXEC: " << str() << std::endl;
+    LogInfo("EXEC: " + str());
   
     res_t res;
-    if ( kind == GET ) {
-      res = LevelDB<KeyT, ValT>::Instance().get(
-              std::get<getarg_t>( args ) );
-    } else if ( kind == PUT ) {
-      res = LevelDB<KeyT, ValT>::Instance().put(
-              std::get<putarg_t>( args ) );
-    } else if ( kind == ADD_SERVER ) {
-      res = true;
-    } else if ( kind == REMOVE_SERVER ) {
-      res = true;
-    } else {
-      std::cout << "Unknown operation kind: " << kind << std::endl;
-      abort();
-      return;
+
+    switch ( kind ) {
+      case GET: {
+        res = LevelDB<KeyT, ValT>::Instance().get(
+                std::get<getarg_t>( args ) );
+        break;
+      }
+      case PUT: {
+        res = LevelDB<KeyT, ValT>::Instance().put(
+                std::get<putarg_t>( args ) );
+        break;
+      }
+      case ADD_SERVER: {
+        res = true;
+        break;
+      }
+      case REMOVE_SERVER: {
+        res = true;
+        break;
+      }
+      default: {
+        LogInfo("Unknown operation kind: " + std::to_string(kind));
+        abort();
+        return;
+      }
     }
 
     if ( promiseHandle.has_value() ) {
@@ -84,18 +95,29 @@ struct Operation {
     }
     auto promise = PromiseStore<res_t>::Instance().getAndRemove(
         promiseHandle.value() );
-    if ( kind == GET ) {
-      promise.set_value({}); // get failed
-    } else if ( kind == PUT ) {
-      promise.set_value( false ); // put failed
-    } else if ( kind == ADD_SERVER ) {
-      promise.set_value( false );
-    } else if ( kind == REMOVE_SERVER ) {
-      promise.set_value( false );
-    } else {
-      std::cout << "Unknown operation kind: " << kind << std::endl;
-      abort();
-      return;
+      
+    switch ( kind ) {
+      case GET: {
+        promise.set_value( {} ); // get failed
+        break;
+      }
+      case PUT: {
+        promise.set_value( false ); // put failed
+        break;
+      }
+      case ADD_SERVER: {
+        promise.set_value( false );
+        break;
+      }
+      case REMOVE_SERVER: {
+        promise.set_value( false );
+        break;
+      }
+      default: {
+        LogInfo("Unknown operation kind: " + std::to_string(kind));
+        abort();
+        return;
+      }
     }
 
     promiseHandle.reset();
@@ -104,17 +126,28 @@ struct Operation {
   std::string str() const {
     std::stringstream oss;
     oss << "Operation[ ";
-    if ( kind == GET ) {
-      oss << "GET(" << std::get<getarg_t>( args ) << ") ";
-    } else if ( kind == PUT ) {
-      auto putarg = std::get<putarg_t>( args );
-      oss << "PUT(" << putarg.first << ", " << putarg.second << ") ";
-    } else if ( kind == ADD_SERVER ) {
-      oss << "ADD_SERVER(" << std::get<addserverarg_t>( args ).ip << ") ";
-    } else if ( kind == REMOVE_SERVER ) {
-      oss << "REMOVE_SERVER(" << std::get<rmserverarg_t>( args ) << ") ";
-    } else {
-      oss << "UNKNOWN_OP(" << kind << ") ";
+    switch ( kind ) {
+      case GET: {
+        oss << "GET(" << std::get<getarg_t>( args ) << ") ";
+        break;
+      }
+      case PUT: {
+        auto putarg = std::get<putarg_t>( args );
+        oss << "PUT(" << putarg.first << ", " << putarg.second << ") ";
+        break;
+      }
+      case ADD_SERVER: {
+        oss << "ADD_SERVER(" << std::get<addserverarg_t>( args ).ip << ") ";
+        break;
+      }
+      case REMOVE_SERVER: {
+        oss << "REMOVE_SERVER(" << std::get<rmserverarg_t>( args ) << ") ";
+        break;
+      }
+      default: {
+        oss << "UNKNOWN_OP ";
+        break;
+      }
     }
 
     oss << "HasPromise=" << promiseHandle.has_value() << " ]";
