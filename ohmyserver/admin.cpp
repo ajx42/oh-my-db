@@ -67,9 +67,7 @@ bool Admin::AddServer( int id, std::string ip, int db_port, int raft_port, std::
     SwitchClient( server_id );
 
     while ( iters-- ) {
-        LogInfo("HI");
         auto ret = client_.AddServer( param );
-        LogInfo("HEY");
 
         if ( !ret.has_value() ) {
             LogError( "Failed to connect to server. It may be dead. Retrying with others." );

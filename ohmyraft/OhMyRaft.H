@@ -691,7 +691,8 @@ AddServerRet RaftManager<T>::AddServer( AddServerParams args)
     return ret;
   }
 
-  bool res = std::get<bool>( ft.get() ); // don't need the value
+  LogInfo("Waiting for operation to get executed...");
+  // bool res = std::get<bool>( ft.get() ); // don't need the value
 
   retryCount = 0;
   while (1) 
@@ -699,6 +700,7 @@ AddServerRet RaftManager<T>::AddServer( AddServerParams args)
     if ( state_.LastConfigChangeCommitted ) {
       break;
     }
+    LogInfo("Waiting for the new config change to get committed...");
 
     retryCount++;
     if ( retryCount == 100 ) 
@@ -783,7 +785,7 @@ RemoveServerRet RaftManager<T>::RemoveServer( RemoveServerParams args)
     return ret;
   }
 
-  bool res = std::get<bool>( ft.get() ); // don't need the value
+  // bool res = std::get<bool>( ft.get() ); // don't need the value
 
   stateLock.lock();
   state_.ClusterConfig.erase(serverId);
