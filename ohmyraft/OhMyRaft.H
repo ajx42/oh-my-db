@@ -94,8 +94,9 @@ public:
   std::pair<bool, int32_t > submit( RaftOp op );
 
   // raft rpc implementations
-  AppendEntriesRet AppendEntries( AppendEntriesParams );
-  RequestVoteRet RequestVote( RequestVoteParams );
+  AppendEntriesRet  AppendEntries( AppendEntriesParams );
+  RequestVoteRet    RequestVote( RequestVoteParams );
+  void              NetworkUpdate( std::vector<PeerNetworkConfig> );
 
 private:  
   // raft core logic implementation
@@ -141,6 +142,22 @@ private:
   int32_t getRandomElectionTimeout();
   void startElection();
 };
+
+template <class T>
+void RaftManager<T>::NetworkUpdate(
+    std::vector<PeerNetworkConfig> pVec )
+{
+  for ( const auto& entry: pVec ) {
+    if ( peers_.find( entry.peerId ) == peers_.end() ) {
+      LogWarn("Unknown Peer in NetworkUpdate: " + entry.str());
+    } else {
+      peers_[entry.peerId]->setEnable( entry.isEnabled );
+      peers_[entry.peerId]->setIsDelayed( entry.isDelayed );
+      peers_[entry.peerId]->setDelayMs( entry.delayMs );
+      LogInfo("Applied NetworkUpdate: " + entry.str());
+    }
+  }
+}
 
 // no need for locking state, this is to be called before start is called
 template <class T>
@@ -648,7 +665,7 @@ void RaftManager<T>::electionImpl()
       case RaftRole::Leader:
         break;
       case RaftRole::Candidate:
-        break; // we shouldn't be here ideally
+        break;
       case RaftRole::Follower:
       {
         if ( timedOut ) {

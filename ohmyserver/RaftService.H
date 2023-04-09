@@ -16,6 +16,7 @@ public:
     grpc::Status TestCall(grpc::ServerContext *, const raftproto::Cmd *, raftproto::Ack *);
     grpc::Status AppendEntries(grpc::ServerContext*, const raftproto::AppendEntriesRequest*, raftproto::AppendEntriesResponse*);
     grpc::Status RequestVote(grpc::ServerContext*, const raftproto::RequestVoteRequest*, raftproto::RequestVoteResponse*);
+    grpc::Status NetworkUpdate(grpc::ServerContext*, const raftproto::NetworkUpdateRequest*, raftproto::NetworkUpdateResponse*);
 };
 
 class RaftClient
@@ -26,6 +27,7 @@ public:
     int32_t Ping(int32_t cmd);
     std::optional<raft::AppendEntriesRet> AppendEntries( raft::AppendEntriesParams );
     std::optional<raft::RequestVoteRet> RequestVote( raft::RequestVoteParams );
+    void NetworkUpdate( std::vector<raft::PeerNetworkConfig> cfgVec );
 private:
     std::unique_ptr<raftproto::Raft::Stub> stub_;
 };

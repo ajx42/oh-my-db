@@ -6,6 +6,7 @@ service Raft {
   rpc TestCall(Cmd) returns(Ack) {}
   rpc AppendEntries(AppendEntriesRequest) returns(AppendEntriesResponse) {}
   rpc RequestVote(RequestVoteRequest) returns(RequestVoteResponse) {}
+  rpc NetworkUpdate(NetworkUpdateRequest) returns(NetworkUpdateResponse) {}
 }
 
 message Ack {
@@ -40,5 +41,14 @@ message RequestVoteRequest {
 message RequestVoteResponse {
   int32 term = 1;
   int32 vote_granted = 2;
+}
+
+message NetworkUpdateRequest {
+  int32 num_entries = 1;
+  bytes data = 2;
+}
+
+message NetworkUpdateResponse {
+  int32 ok = 1;
 }
 
