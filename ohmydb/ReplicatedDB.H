@@ -48,8 +48,7 @@ inline std::optional<int32_t> ReplicatedDB::get( int32_t key )
     // try until you find a leader
     auto retOpt = client_.Get( key );
 
-    //Either failed to connect to server, or its not the leader. Try another server.
-    if ( ! retOpt.has_value() || retOpt.value().errorCode == ErrorCode::NOT_LEADER) {
+    if ( ! retOpt.has_value()) {
       LogError( "Failed to connect to DB server: RPC Failed, contacting server " + std::to_string(backupID) );
       auto serverAddr = std::string(serverInfo_[backupID].ip) + ":" + std::to_string(serverInfo_[backupID].db_port);
       updateChannel(serverAddr);
@@ -58,6 +57,11 @@ inline std::optional<int32_t> ReplicatedDB::get( int32_t key )
       {
           backupID = 0;
       }
+      continue;
+    } else if ( retOpt.value().errorCode == ErrorCode::NOT_LEADER ) {
+      auto serverAddr = retOpt.value().leaderAddr;
+      LogError( "Failed to connect to DB server: Not Leader, contacting server " + serverAddr );
+      updateChannel(serverAddr);
       continue;
     }
 

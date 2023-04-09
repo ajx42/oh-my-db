@@ -512,9 +512,9 @@ AppendEntriesRet RaftManager<T>::AppendEntries( AppendEntriesParams args )
           // apply config change
           if ( args.entries[i].op.kind ==  RaftOp::OpType::ADD_SERVER ) {
             ServerInfo info = std::get<RaftOp::addserverarg_t>(args.entries[i].op.args);
+            state_.ClusterConfig[info.id] = info;
             if ( info.id != id_ )
             {
-              state_.ClusterConfig[info.id] = info;
               lock.unlock();
               std::string addr = std::string(info.ip) + ":" + std::to_string(info.raft_port);
               addPeer( info.id, 
@@ -523,7 +523,6 @@ AppendEntriesRet RaftManager<T>::AppendEntries( AppendEntriesParams args )
             }
           } else if ( args.entries[i].op.kind ==  RaftOp::OpType::REMOVE_SERVER ) {
               lock.unlock();
-              LogInfo("I'm removing peer in append entries");
               removePeer( std::get<RaftOp::rmserverarg_t>(args.entries[i].op.args) );
               lock.lock();
           }
@@ -695,6 +694,12 @@ AddServerRet RaftManager<T>::AddServer( AddServerParams args)
   while (1) 
   {
     stateLock.lock();
+    if ( state_.Role != RaftRole::Leader ) {
+      ret.errorCode = raft::ErrorCode::NOT_LEADER;
+      ret.leaderAddr = getLastKnownLeaderRaftAddr();
+      return ret;
+    }
+
     if ( prevConfigChangeIndex < state_.LastConfigChangeIndex &&
          state_.LastConfigChangeIndex <= state_.CommitIndex ) {
       break;
@@ -713,6 +718,7 @@ AddServerRet RaftManager<T>::AddServer( AddServerParams args)
     std::this_thread::sleep_for( std::chrono::milliseconds(100) );
   }
 
+  LogInfo("Committing new config change");
   ret.errorCode = raft::ErrorCode::OK;
   ret.leaderAddr = "";
   return ret;

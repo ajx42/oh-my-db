@@ -107,6 +107,8 @@ bool Admin::AddServer( int id, std::string ip, int db_port, int raft_port, std::
                 break;
             }
         }
+
+        std::this_thread::sleep_for( std::chrono::milliseconds(500) );
     }
 
     LogWarn( "Failed to add server after " + std::to_string(MAX_TRIES) + " tries." );
