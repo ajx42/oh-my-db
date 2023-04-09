@@ -13,6 +13,45 @@ struct ServerInfo {
     std::string name;
 };
 
+struct TokenizedOut {
+  std::unordered_map<std::string, int32_t> header;
+  std::vector<std::vector<std::string>> tokensByRow;
+};
+
+inline TokenizedOut TokenizeCSV( std::string filename )
+{
+  TokenizedOut ret;
+  auto& header = ret.header;
+
+  std::ifstream file(filename);
+  std::string line;
+  // parse header
+  std::getline(file, line);
+  std::stringstream ss(line);
+  std::string token;
+
+  while (std::getline(ss, token, ','))
+  {
+      header[token] = header.size();
+  }
+
+  // parse each node
+  while (std::getline(file, line))
+  {
+      // check if line is empty
+      if (line.empty()) break;
+      std::stringstream ss(line);
+      std::string token;
+      std::vector<std::string> tokens;
+      while (getline(ss, token, ','))
+      {
+          tokens.push_back(token);
+      }
+      ret.tokensByRow.push_back(tokens);
+  }
+  return ret;
+}
+
 inline std::vector<ServerInfo> ParseConfig(std::string filename)
 {
     std::vector<ServerInfo> servers;
