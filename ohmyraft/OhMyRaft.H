@@ -562,10 +562,13 @@ void RaftManager<T>::becomeLeader()
   state_.ElectionResetEvent = std::chrono::system_clock::now();
   state_.VotedFor = -1;
   state_.LastKnownLeaderId = id_;
-  // No need to reset NextIndex and MatchIndex
-  // they will be auto adjusted.
-  // Also the best guess at their values is to keep whatever
-  // we already have.
+  state_.NextIndex.clear();
+  state_.MatchIndex.clear();
+  // initialise leader state
+  for ( auto& [id, _]: peers_ ) {
+    state_.NextIndex[id] = state_.Logs.size();
+    state_.MatchIndex[id] = -1;
+  }
   state_.persist();
 }
 // -- end of role transition helpers
