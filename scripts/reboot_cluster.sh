@@ -6,10 +6,7 @@ start_replica()
     id=$2
 
     ssh ${SSH_HOST} << EOF
-    killall monitor.sh
-    killall replica
-    killall client 
-    rm -rf /tmp/db
+    sudo reboot 
 EOF
 
 

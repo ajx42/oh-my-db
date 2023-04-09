@@ -25,3 +25,4 @@ sudo apt install -y kitware-archive-keyring
 sudo rm /etc/apt/trusted.gpg.d/kitware.gpg
 sudo apt update -y
 sudo apt install -y cmake
+sudo apt install -y ifstat

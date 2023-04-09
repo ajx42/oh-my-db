@@ -187,8 +187,11 @@ void RaftManager<T>::runLeaderOneIter()
   state_.Logs.persist();
   state_.Mut.unlock();
 
+
+  std::vector<std::thread*> threadHandles;
+
   for ( auto& [id, peer] : peers_ ) {
-    auto th = std::thread([id = id, this, savedCurrentTerm]{
+    auto th = new std::thread([id = id, this, savedCurrentTerm]{
       AppendEntriesParams args;
 
       state_.Mut.lock();
@@ -240,7 +243,7 @@ void RaftManager<T>::runLeaderOneIter()
           state_.MatchIndex[id] = state_.NextIndex[id] - 1;
           
           auto savedCommitIndex = state_.CommitIndex;
-          for ( size_t i = state_.CommitIndex + 1; i < state_.Logs.size(); ++i ) {
+          for ( int32_t i = state_.CommitIndex + 1; i < (int32_t)state_.Logs.size(); ++i ) {
             if ( state_.Logs[i].term == state_.CurrentTerm ) {
               auto matchCount = 1;
               for ( auto& [pid, _] : peers_ ) {
@@ -248,7 +251,7 @@ void RaftManager<T>::runLeaderOneIter()
                   matchCount++;
                 }
               }
-              if ( matchCount * 2 > peers_.size() ) {
+              if ( matchCount * 2 > (int32_t)peers_.size() ) {
                 state_.CommitIndex = i;
               }
             }
@@ -256,7 +259,7 @@ void RaftManager<T>::runLeaderOneIter()
           if ( state_.CommitIndex != savedCommitIndex ) {
             LogInfo("New entries being committed" );
             std::lock_guard<std::mutex> rom( raftOutMutex_ );
-            for ( size_t i = state_.LastApplied + 1; i <= state_.CommitIndex; ++i ) {
+            for ( int32_t i = state_.LastApplied + 1; i <= state_.CommitIndex; ++i ) {
               raftOut_.push_back( state_.Logs[i].op );
             }
             state_.LastApplied = state_.CommitIndex;
@@ -270,8 +273,14 @@ void RaftManager<T>::runLeaderOneIter()
         }
       }
     });
-    th.detach();
+    //threadHandles.push_back(th);
+    th->detach();
   }
+
+  //for ( auto& th : threadHandles) {
+  //    th->join();
+  //    delete th;
+  //}
 }
 
 template <class T>
@@ -417,14 +426,14 @@ AppendEntriesRet RaftManager<T>::AppendEntries( AppendEntriesParams args )
       becomeFollower( args.term );
     }
     if ( args.prevLogIndex == -1 ||
-         ( args.prevLogIndex < state_.Logs.size() && args.prevLogTerm == state_.Logs[args.prevLogIndex].term) )
+         ( args.prevLogIndex < (int32_t)state_.Logs.size() && args.prevLogTerm == state_.Logs[args.prevLogIndex].term) )
     {
       reply.success = true;
       auto logInsertIndex = args.prevLogIndex + 1;
       auto newEntriesIndex = 0;
 
       while ( true ) {
-        if ( logInsertIndex >= state_.Logs.size() || newEntriesIndex >= args.entries.size() ) {
+        if ( logInsertIndex >= (int32_t)state_.Logs.size() || newEntriesIndex >= (int32_t)args.entries.size() ) {
           break;
         }
         if ( state_.Logs[logInsertIndex].term != args.entries[newEntriesIndex].term ) {
@@ -434,7 +443,7 @@ AppendEntriesRet RaftManager<T>::AppendEntries( AppendEntriesParams args )
         newEntriesIndex++;
       }
 
-      if ( newEntriesIndex < args.entries.size() ) {
+      if ( newEntriesIndex < (int32_t)args.entries.size() ) {
         for ( size_t i = logInsertIndex; i < state_.Logs.size(); ++i ) {
           state_.Logs[i].op.abort(); // release any pending service requests
         }
@@ -456,7 +465,7 @@ AppendEntriesRet RaftManager<T>::AppendEntries( AppendEntriesParams args )
         state_.CommitIndex = std::min( args.leaderCommit, (int32_t) state_.Logs.size() - 1 );
         std::lock_guard<std::mutex> rom(raftOutMutex_);
         // queue all jobs that can be committed to be fed to the executer
-        for ( size_t i = state_.LastApplied + 1; i <= state_.CommitIndex; ++i ) {
+        for ( int32_t i = state_.LastApplied + 1; i <= state_.CommitIndex; ++i ) {
           raftOut_.push_back( state_.Logs[i].op );
         }
         state_.LastApplied = state_.CommitIndex;
@@ -618,7 +627,7 @@ void RaftManager<T>::startElection()
       } else if ( reply.term == savedCurrentTerm ) {
         if ( reply.voteGranted ) {
           state_.VotesReceived++;
-          if ( state_.VotesReceived * 2 > peers_.size() ) {
+          if ( state_.VotesReceived * 2 > (int32_t) peers_.size() ) {
             LogInfo("Id=" + std::to_string(id_) + " elected as leader");
             becomeLeader();
           }
