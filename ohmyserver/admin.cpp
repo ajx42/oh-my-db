@@ -19,6 +19,7 @@ public:
 
   bool AddServer( int id, std::string ip, int db_port, int raft_port, std::string name );
   bool RemoveServer( int id );
+  bool WriteConfig( std::string filename, std::map<int32_t, ServerInfo> servers );
 
 private:
   static constexpr const int32_t MAX_TRIES = 1000;
@@ -99,8 +100,8 @@ bool Admin::AddServer( int id, std::string ip, int db_port, int raft_port, std::
                 break;
             }
             case raft::ErrorCode::SERVER_EXISTS: {
-                LogWarn( "Server already exists in the cluster. Aborting." );
-                return false;
+                LogWarn( "Server already exists in the cluster. Success." );
+                return true;
             }
             case raft::ErrorCode::OTHER: {
                 LogWarn( "Unknown error. Retrying." );
@@ -172,6 +173,26 @@ bool Admin::RemoveServer( int id )
     return false;
 }
 
+bool Admin::WriteConfig( std::string filename, std::map<int32_t, ServerInfo> servers )
+{
+    // file is a csv, with header 
+    // name,intf_ip,raft_port,db_port
+    std::ofstream file( filename );
+    if ( !file.is_open() ) {
+        LogError( "Failed to open file " + filename );
+        return false;
+    }
+
+    file << "id,name,intf_ip,raft_port,db_port" << std::endl;
+    for ( const auto& [id, info] : servers ) {
+        file << info.id << "," << info.name << "," << info.ip << "," << info.raft_port << "," << info.db_port << std::endl;
+    }
+
+    file.close();
+    LogInfo( "Successfully wrote config to " + filename );
+    return true;
+}
+
 int main(int argc, char **argv)
 {
     argparse::ArgumentParser program("client");
@@ -232,8 +253,25 @@ int main(int argc, char **argv)
 
     if ( op == "add" ) {
         auto ret = admin.AddServer( id, ip, db_port, raft_port, name );
+        if ( ret )
+        {
+            ServerInfo info = {
+                .id = id,
+                .raft_port = raft_port,
+                .db_port = db_port,
+            };
+            strcpy( info.ip, ip.c_str() );
+            strcpy( info.name, name.c_str() );
+            servers[id] = info;
+            admin.WriteConfig( configPath, servers );
+        }
     } else if ( op == "rm" ) {
         auto ret = admin.RemoveServer( id );
+        if ( ret )
+        {
+            servers.erase( id );
+            admin.WriteConfig( configPath, servers );
+        }
     }
     
     return 0;

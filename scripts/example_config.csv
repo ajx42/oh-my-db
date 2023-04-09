@@ -1,6 +1,6 @@
-name,intf_ip,host_ip,hostname,username,raft_port,db_port
-node0,10.10.1.1,155.98.38.9,pc409.emulab.net,hjcoffey,8080,12345
-node1,10.10.1.2,155.98.38.83,pc483.emulab.net,hjcoffey,8080,12345
-node2,10.10.1.3,155.98.38.42,pc442.emulab.net,hjcoffey,8080,12345
-node3,10.10.1.4,155.98.38.81,pc481.emulab.net,hjcoffey,8080,12345
-node4,10.10.1.5,155.98.38.115,pc515.emulab.net,hjcoffey,8080,12345
+id,name,intf_ip,host_ip,hostname,username,raft_port,db_port
+0,node0,10.10.1.1,155.98.38.9,pc409.emulab.net,hjcoffey,8080,12345
+1,node1,10.10.1.2,155.98.38.83,pc483.emulab.net,hjcoffey,8080,12345
+2,node2,10.10.1.3,155.98.38.42,pc442.emulab.net,hjcoffey,8080,12345
+3,node3,10.10.1.4,155.98.38.81,pc481.emulab.net,hjcoffey,8080,12345
+4,node4,10.10.1.5,155.98.38.115,pc515.emulab.net,hjcoffey,8080,12345

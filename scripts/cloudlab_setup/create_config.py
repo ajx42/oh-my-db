@@ -33,12 +33,16 @@ def parse_manifest(manifest):
 def create_config(details, raft_port, db_port):
     config = pd.DataFrame(columns=details[0]._fields+('raft_port', 'db_port'))
 
+    i = 0
     for node_info in details:
         d = node_info._asdict()
+        d["id"] = i
         d['raft_port'] = raft_port
         d['db_port'] = db_port
         # remove port
         config = pd.concat([config, pd.DataFrame(d, index=[0])], ignore_index=True)
+
+        i += 1
     
     return config
 

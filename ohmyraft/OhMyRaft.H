@@ -635,6 +635,7 @@ AddServerRet RaftManager<T>::AddServer( AddServerParams args)
 
   // wait until previous config change is commited
   int retryCount = 0;
+  LogInfo("Waiting for previous config change to be committed");
   stateLock.unlock();
   while (1) {
     stateLock.lock();
@@ -654,6 +655,7 @@ AddServerRet RaftManager<T>::AddServer( AddServerParams args)
 
     std::this_thread::sleep_for( std::chrono::milliseconds(100) );
   }
+  LogInfo("Previous config change is committed");
 
   int prevConfigChangeIndex = state_.LastConfigChangeIndex;
   stateLock.unlock();
@@ -682,6 +684,7 @@ AddServerRet RaftManager<T>::AddServer( AddServerParams args)
 
   // wait until it is committed
   retryCount = 0;
+  LogInfo("Waiting for the new config change to be committed");
   while (1) 
   {
     stateLock.lock();
