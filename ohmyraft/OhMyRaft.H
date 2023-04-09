@@ -238,7 +238,6 @@ void RaftManager<T>::runLeaderOneIter()
         if ( reply.success ) {
           state_.NextIndex[id] = nextIndex + args.entries.size();
           state_.MatchIndex[id] = state_.NextIndex[id] - 1;
-          
           auto savedCommitIndex = state_.CommitIndex;
           for ( size_t i = state_.CommitIndex + 1; i < state_.Logs.size(); ++i ) {
             if ( state_.Logs[i].term == state_.CurrentTerm ) {
@@ -395,8 +394,13 @@ template <class T>
 AppendEntriesRet RaftManager<T>::AppendEntries( AppendEntriesParams args )
 {
   std::lock_guard<std::mutex> lock(state_.Mut);
-  state_.ElectionResetEvent = std::chrono::system_clock::now();
   
+  // This means we are going to accept this RPC, so good to reset
+  // the election timer now.
+  if ( args.term >= state_.CurrentTerm ) {
+    state_.ElectionResetEvent = std::chrono::system_clock::now();
+  }
+
   if ( state_.Role == RaftRole::Dead ) {
     return {};
   }
@@ -541,13 +545,10 @@ void RaftManager<T>::becomeLeader()
   state_.ElectionResetEvent = std::chrono::system_clock::now();
   state_.VotedFor = -1;
   state_.LastKnownLeaderId = id_;
-  state_.NextIndex.clear();
-  state_.MatchIndex.clear();
-  // initialise leader state
-  for ( auto& [id, _]: peers_ ) {
-    state_.NextIndex[id] = state_.Logs.size();
-    state_.MatchIndex[id] = -1;
-  }
+  // No need to reset NextIndex and MatchIndex
+  // they will be auto adjusted.
+  // Also the best guess at their values is to keep whatever
+  // we already have.
   state_.persist();
 }
 // -- end of role transition helpers

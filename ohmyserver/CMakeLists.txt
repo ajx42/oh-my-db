@@ -125,4 +125,5 @@ target_link_libraries(replica raft_grpc_proto)
 add_executable(client client.cpp)
 target_link_libraries(client db_grpc_proto)
 
+install(TARGETS client replica server DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
 
