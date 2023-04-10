@@ -7,10 +7,11 @@ start_replica()
 
     ssh ${SSH_HOST} << EOF
     cd oh-my-db
-    rm -rf *.log.dat
+    ./scripts/monitor/monitor.sh &
+    cd ..
+    ./oh-my-db/build/ohmyserver/replica --config ./config.csv --id $2 --db_path /tmp/db &
+    ./oh-my-db/build/ohmyserver/client --config ./config.csv --iter 20 --numkeys 50 &
 EOF
-
-
 }
 
 parse_ssh_hosts()
@@ -29,19 +30,20 @@ parse_ssh_hosts()
     echo ${arr[@]}
 }
 
+
 # here assuming the 4-th column is the hostname, and 5-th column is the username
 SSH_HOSTS=($(parse_ssh_hosts config.sh \$5\"@\"\$4))
 
 # Get the length of the array
-size=${#SSH_HOSTS[@]}
+#size=${#SSH_HOSTS[@]}
 
 #for SSH_HOST in "${SSH_HOSTS[@]}"
-for ((i=0; i<$size; i++)); do
+#for ((i=0; i<$size; i++)); do
 
-SSH_HOST=${SSH_HOSTS[$i]}
+SSH_HOST=${SSH_HOSTS[$1]}
 
-start_replica ${SSH_HOST} $i &
+start_replica ${SSH_HOST} $1 &
 
-done
+#done
 
 wait
