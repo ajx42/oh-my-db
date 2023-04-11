@@ -352,4 +352,23 @@ inline std::string RemoveServerRet::str() const {
   return ss.str();
 }
 
+struct PeerNetworkConfig {
+  int32_t peerId;
+  bool isEnabled = true;
+  bool isDelayed = false;
+  int32_t delayMs = 0;
+
+  std::string str() const;
+} __attribute__((__packed__));
+
+inline std::string PeerNetworkConfig::str() const {
+  std::stringstream ss;
+  ss  << "PeerNetworkConfig=["
+      << "PeerId=" << peerId << " "
+      << "IsEnabled=" << isEnabled << " "
+      << "IsDelayed=" << isDelayed << " "
+      << "DelayMS=" << delayMs << "]";
+  return ss.str();
+}
+
 } // end namespace 

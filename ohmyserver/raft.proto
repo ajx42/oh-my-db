@@ -8,6 +8,7 @@ service Raft {
   rpc RequestVote(RequestVoteRequest) returns(RequestVoteResponse) {}
   rpc AddServer(AddServerRequest) returns(AddServerResponse) {}
   rpc RemoveServer(RemoveServerRequest) returns(RemoveServerResponse) {}
+  rpc NetworkUpdate(NetworkUpdateRequest) returns(NetworkUpdateResponse) {}
 }
 
 message Ack {
@@ -65,3 +66,13 @@ message RemoveServerResponse {
   int32 error_code = 1;
   string leader_addr = 2;
 }
+
+message NetworkUpdateRequest {
+  int32 num_entries = 1;
+  bytes data = 2;
+}
+
+message NetworkUpdateResponse {
+  int32 ok = 1;
+}
+

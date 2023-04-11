@@ -100,7 +100,20 @@ grpc::Status RaftService::RemoveServer(
   auto ret = ReplicaManager::Instance().RemoveServer( param );
   response->set_error_code( ret.errorCode );
   response->set_leader_addr( ret.leaderAddr );
+  return grpc::Status::OK;
+}
 
+grpc::Status RaftService::NetworkUpdate(
+    grpc::ServerContext*,
+    const raftproto::NetworkUpdateRequest* request,
+    raftproto::NetworkUpdateResponse* response )
+{
+  std::vector<raft::PeerNetworkConfig> pVec;
+  for ( size_t i = 0; i < request->data().size(); i += sizeof(raft::PeerNetworkConfig) ) {
+    pVec.push_back(
+        *reinterpret_cast<const raft::PeerNetworkConfig*>( request->data().data() + i ) );
+  }
+  ReplicaManager::Instance().NetworkUpdate( pVec );
   return grpc::Status::OK;
 }
 
@@ -250,3 +263,20 @@ RaftClient::RemoveServer( raft::RemoveServerParams args )
   };
   return {ret};
 }
+
+void RaftClient::NetworkUpdate( std::vector<raft::PeerNetworkConfig> pVec )
+{
+  raftproto::NetworkUpdateRequest request;
+  request.set_num_entries( pVec.size() );
+  
+  std::string toSend(reinterpret_cast<const char*>(pVec.data()),
+      sizeof(raft::PeerNetworkConfig) * pVec.size() );
+  
+  request.set_data( toSend );
+
+  raftproto::NetworkUpdateResponse response;
+  grpc::ClientContext context;
+
+  std::ignore  = stub_->NetworkUpdate(&context, request, &response);
+}
+

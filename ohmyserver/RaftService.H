@@ -18,6 +18,7 @@ public:
     grpc::Status RequestVote(grpc::ServerContext*, const raftproto::RequestVoteRequest*, raftproto::RequestVoteResponse*);
     grpc::Status AddServer(grpc::ServerContext*, const raftproto::AddServerRequest*, raftproto::AddServerResponse*);
     grpc::Status RemoveServer(grpc::ServerContext*, const raftproto::RemoveServerRequest*, raftproto::RemoveServerResponse*);
+    grpc::Status NetworkUpdate(grpc::ServerContext*, const raftproto::NetworkUpdateRequest*, raftproto::NetworkUpdateResponse*);
 };
 
 class RaftClient
@@ -30,6 +31,7 @@ public:
     std::optional<raft::RequestVoteRet> RequestVote( raft::RequestVoteParams );
     std::optional<raft::AddServerRet> AddServer( raft::AddServerParams );
     std::optional<raft::RemoveServerRet> RemoveServer( raft::RemoveServerParams );
+    void NetworkUpdate( std::vector<raft::PeerNetworkConfig> cfgVec );
 private:
     std::unique_ptr<raftproto::Raft::Stub> stub_;
 };

@@ -86,6 +86,10 @@ int main(int argc, char **argv)
       .help("DB port of the node. Only needed when addedNode is true.")
       .default_value("-1");
     
+  program.add_argument("--quicktest")
+      .help("generates two ops after startup for a quick test")
+      .default_value( false )
+      .implicit_value( true );
 
   try {
       program.parse_args( argc, argv );
@@ -106,6 +110,7 @@ int main(int argc, char **argv)
   auto ip = program.get<std::string>("--ip");
   auto raft_port = std::stoi(program.get<std::string>("--raft_port"));
   auto db_port = std::stoi(program.get<std::string>("--db_port"));
+  auto enableQuickTest = program["--quicktest"] == true;
 
   auto servers = ParseConfig(config_path);
 
@@ -118,7 +123,7 @@ int main(int argc, char **argv)
   };
 
 
-  if ( !isAddedNode ) {
+  if ( ! isAddedNode ) {
     auto selfDetails = servers[id];
     printServer("ServerDetails", id);
     ReplicaManager::Instance().initialiseServices(
@@ -126,7 +131,7 @@ int main(int argc, char **argv)
   } else {
     ReplicaManager::Instance().initialiseServices(
       servers, id, false, db_path, enableBootstrap, store_dir,
-      ip=ip, raft_port=raft_port, db_port=db_port );  
+      ip, raft_port, db_port );  
   }
   
   // start up the replica
@@ -135,8 +140,10 @@ int main(int argc, char **argv)
   std::this_thread::sleep_for(std::chrono::seconds(5));
 
   // -- @FIXME: remove once done, for test only
+  if ( enableQuickTest ) {
     ReplicaManager::Instance().put( std::make_pair(1, 2) );
     LogInfo( "Received Output: " + std::to_string( ReplicaManager::Instance().get(1).value ) );
+  }
   // -- 
 
   while( 1 ) { std::this_thread::sleep_for(std::chrono::seconds(5)); }
