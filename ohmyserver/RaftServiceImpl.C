@@ -62,6 +62,20 @@ grpc::Status RaftService::RequestVote(
   return grpc::Status::OK;
 }
 
+grpc::Status RaftService::NetworkUpdate(
+    grpc::ServerContext*,
+    const raftproto::NetworkUpdateRequest* request,
+    raftproto::NetworkUpdateResponse* response )
+{
+  std::vector<raft::PeerNetworkConfig> pVec;
+  for ( size_t i = 0; i < request->data().size(); i += sizeof(raft::PeerNetworkConfig) ) {
+    pVec.push_back(
+        *reinterpret_cast<const raft::PeerNetworkConfig*>( request->data().data() + i ) );
+  }
+  ReplicaManager::Instance().NetworkUpdate( pVec );
+  return grpc::Status::OK;
+}
+
 int32_t RaftClient::Ping(int32_t cmd)
 {
     raftproto::Cmd request;
@@ -144,4 +158,20 @@ RaftClient::RequestVote( raft::RequestVoteParams args )
     .voteGranted = static_cast<bool>( response.vote_granted() )
   };
   return {ret};
+}
+
+void RaftClient::NetworkUpdate( std::vector<raft::PeerNetworkConfig> pVec )
+{
+  raftproto::NetworkUpdateRequest request;
+  request.set_num_entries( pVec.size() );
+  
+  std::string toSend(reinterpret_cast<const char*>(pVec.data()),
+      sizeof(raft::PeerNetworkConfig) * pVec.size() );
+  
+  request.set_data( toSend );
+
+  raftproto::NetworkUpdateResponse response;
+  grpc::ClientContext context;
+
+  std::ignore  = stub_->NetworkUpdate(&context, request, &response);
 }

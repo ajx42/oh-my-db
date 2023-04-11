@@ -69,6 +69,11 @@ int main(int argc, char **argv)
       .help("directory to store persistent raft state in")
       .default_value("/tmp/");
 
+  program.add_argument("--quicktest")
+      .help("generates two ops after startup for a quick test")
+      .default_value( false )
+      .implicit_value( true );
+
   try {
       program.parse_args( argc, argv );
   }
@@ -84,6 +89,7 @@ int main(int argc, char **argv)
   auto db_path = program.get<std::string>("--db_path");
   auto store_dir = program.get<std::string>("--storedir");  
   auto enableBootstrap = program["--bootstrap"] == true;
+  auto enableQuickTest = program["--quicktest"] == true;
 
   auto servers = ParseConfig(config_path);
 
@@ -107,8 +113,10 @@ int main(int argc, char **argv)
   std::this_thread::sleep_for(std::chrono::seconds(5));
 
   // -- @FIXME: remove once done, for test only
+  if ( enableQuickTest ) {
     ReplicaManager::Instance().put( std::make_pair(1, 2) );
     LogInfo( "Received Output: " + std::to_string( ReplicaManager::Instance().get(1).value ) );
+  }
   // -- 
 
   while( 1 ) { std::this_thread::sleep_for(std::chrono::seconds(5)); }

@@ -3,6 +3,7 @@
 #include "ConsensusUtils.H"
 #include "OhMyConfig.H"
 #include "OhMyRaft.H"
+#include "RaftRPCRouter.H"
 #include "RaftService.H"
 #include "DatabaseService.H"
 #include "DatabaseUtils.H"
@@ -34,6 +35,8 @@ public:
   raft::AppendEntriesRet AppendEntries( raft::AppendEntriesParams args );
   raft::RequestVoteRet RequestVote( raft::RequestVoteParams args ); 
 
+  void NetworkUpdate( std::vector<raft::PeerNetworkConfig> pVec );
+  
   void start();
   void stop();
 
@@ -41,7 +44,7 @@ public:
 
 private:
   ReplicaManager() {}
-  raft::RaftManager<RaftClient> raft_;
+  raft::RaftManager<raft::RaftRPCRouter> raft_;
   
   grpc::ServerBuilder raftBuilder_;
   RaftService raftService_;
@@ -53,6 +56,12 @@ private:
 
   std::vector<ServerInfo> servers_;
 };
+
+inline void ReplicaManager::NetworkUpdate(
+    std::vector<raft::PeerNetworkConfig> pVec )
+{
+  raft_.NetworkUpdate( pVec );
+}
 
 inline void ReplicaManager::initialiseServices(
     std::vector<ServerInfo> servers, int id, bool waitForPeers,
@@ -79,7 +88,7 @@ inline void ReplicaManager::initialiseServices(
   });
   raftServer_.detach();
 
-  std::map<int32_t, std::unique_ptr<RaftClient>> peers;
+  std::map<int32_t, std::unique_ptr<raft::RaftRPCRouter>> peers;
   
   // construct RPC clients for all peers (excluding the replica we are at)
   for ( size_t i = 0; i < servers_.size(); ++i ) {
@@ -87,7 +96,7 @@ inline void ReplicaManager::initialiseServices(
       continue;
     }
     auto address = servers_[i].ip + ":" + std::to_string(servers_[i].raft_port); 
-    peers[i] = std::make_unique<RaftClient>(grpc::CreateChannel(
+    peers[i] = std::make_unique<raft::RaftRPCRouter>(grpc::CreateChannel(
         address, grpc::InsecureChannelCredentials())); 
   }
 

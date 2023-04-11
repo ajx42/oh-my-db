@@ -94,8 +94,9 @@ public:
   std::pair<bool, int32_t > submit( RaftOp op );
 
   // raft rpc implementations
-  AppendEntriesRet AppendEntries( AppendEntriesParams );
-  RequestVoteRet RequestVote( RequestVoteParams );
+  AppendEntriesRet  AppendEntries( AppendEntriesParams );
+  RequestVoteRet    RequestVote( RequestVoteParams );
+  void              NetworkUpdate( std::vector<PeerNetworkConfig> );
 
 private:  
   // raft core logic implementation
@@ -141,6 +142,22 @@ private:
   int32_t getRandomElectionTimeout();
   void startElection();
 };
+
+template <class T>
+void RaftManager<T>::NetworkUpdate(
+    std::vector<PeerNetworkConfig> pVec )
+{
+  for ( const auto& entry: pVec ) {
+    if ( peers_.find( entry.peerId ) == peers_.end() ) {
+      LogWarn("Unknown Peer in NetworkUpdate: " + entry.str());
+    } else {
+      peers_[entry.peerId]->setEnable( entry.isEnabled );
+      peers_[entry.peerId]->setIsDelayed( entry.isDelayed );
+      peers_[entry.peerId]->setDelayMs( entry.delayMs );
+      LogInfo("Applied NetworkUpdate: " + entry.str());
+    }
+  }
+}
 
 // no need for locking state, this is to be called before start is called
 template <class T>
@@ -241,7 +258,6 @@ void RaftManager<T>::runLeaderOneIter()
         if ( reply.success ) {
           state_.NextIndex[id] = nextIndex + args.entries.size();
           state_.MatchIndex[id] = state_.NextIndex[id] - 1;
-          
           auto savedCommitIndex = state_.CommitIndex;
           for ( int32_t i = state_.CommitIndex + 1; i < (int32_t)state_.Logs.size(); ++i ) {
             if ( state_.Logs[i].term == state_.CurrentTerm ) {
@@ -404,8 +420,13 @@ template <class T>
 AppendEntriesRet RaftManager<T>::AppendEntries( AppendEntriesParams args )
 {
   std::lock_guard<std::mutex> lock(state_.Mut);
-  state_.ElectionResetEvent = std::chrono::system_clock::now();
   
+  // This means we are going to accept this RPC, so good to reset
+  // the election timer now.
+  if ( args.term >= state_.CurrentTerm ) {
+    state_.ElectionResetEvent = std::chrono::system_clock::now();
+  }
+
   if ( state_.Role == RaftRole::Dead ) {
     return {};
   }
@@ -656,7 +677,7 @@ void RaftManager<T>::electionImpl()
       case RaftRole::Leader:
         break;
       case RaftRole::Candidate:
-        break; // we shouldn't be here ideally
+        break;
       case RaftRole::Follower:
       {
         if ( timedOut ) {
