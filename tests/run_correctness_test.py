@@ -19,10 +19,6 @@ WRITESTORE = '{0}/writestore --id {1} --outputdir {2} --input {3}/rep{1}.csv --c
 LAUNCH = '{0}/replica --id {1} --config {2} --db_path {3}/db{1} --storedir {3}'
 READSTORE = '{0}/readstore --vec --file {1}/raft.{2}.log.persist'
 
-def launchReplicaById(repId):
-   # ./replica --config ../../config.csv --db_path /tmp/db4 --id 4 --storedir /tmp/test --bootstrap
-    pass
-
 
 def main():
     logging.basicConfig(level=logging.INFO)
