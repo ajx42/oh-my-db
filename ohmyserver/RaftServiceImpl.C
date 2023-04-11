@@ -143,20 +143,29 @@ RaftClient::AppendEntries( raft::AppendEntriesParams args )
   std::vector<raft::TransportEntry> entriesToShip;
   for ( auto entry: args.entries ) {
     auto& op = entry.op;
-    int32_t arg1;
-    int32_t arg2;
+    int32_t arg1 = 0, arg2 = 0;
     ServerInfo serverInfo;
-    if ( op.kind == raft::RaftOp::GET ) {
-      arg1 = std::get<raft::RaftOp::getarg_t>( op.args );
-    } else if ( op.kind == raft::RaftOp::PUT ) {
-      arg1 = std::get<raft::RaftOp::putarg_t>( op.args ).first;
-      arg2 = std::get<raft::RaftOp::putarg_t>( op.args ).second;
-    } else if ( op.kind == raft::RaftOp::ADD_SERVER ) {
-      serverInfo = std::get<raft::RaftOp::addserverarg_t>( op.args );
-    } else {
-      arg1 = std::get<raft::RaftOp::getarg_t>( op.args );
+    
+    switch ( op.kind ) {
+      case raft::RaftOp::GET: {
+        arg1 = std::get<raft::RaftOp::getarg_t>( op.args );
+        break;
+      }
+      case raft::RaftOp::PUT: {
+        arg1 = std::get<raft::RaftOp::putarg_t>( op.args ).first;
+        arg2 = std::get<raft::RaftOp::putarg_t>( op.args ).second;
+        break;
+      }
+      case raft::RaftOp::ADD_SERVER: {
+        serverInfo = std::get<raft::RaftOp::addserverarg_t>( op.args );
+        break;
+      }
+      case raft::RaftOp::REMOVE_SERVER: {
+        arg1 = std::get<raft::RaftOp::getarg_t>( op.args );
+        break;
+      }
     }
-
+     
     entriesToShip.push_back( raft::TransportEntry {
       .term = entry.term,
       .index = entry.index,

@@ -124,7 +124,6 @@ int main(int argc, char **argv)
 
 
   if ( ! isAddedNode ) {
-    auto selfDetails = servers[id];
     printServer("ServerDetails", id);
     ReplicaManager::Instance().initialiseServices(
         servers, id, true, db_path, enableBootstrap, store_dir);

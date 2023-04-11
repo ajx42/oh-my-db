@@ -101,7 +101,8 @@ inline void ReplicaManager::initialiseServices(
     if ( (int)i == id ) {
       continue;
     }
-    auto address = servers_[i].ip + ":" + std::to_string(servers_[i].raft_port); 
+    auto address = std::string( serverConfig.ip ) + ":" 
+                  + std::to_string(serverConfig.raft_port);
     peers[i] = std::make_unique<raft::RaftRPCRouter>(grpc::CreateChannel(
         address, grpc::InsecureChannelCredentials())); 
   }

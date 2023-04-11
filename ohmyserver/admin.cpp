@@ -23,8 +23,8 @@ public:
 
 private:
   static constexpr const int32_t MAX_TRIES = 1000;
-  RaftClient client_;
   std::map<int32_t, ServerInfo> servers_; // map of server id to server info
+  RaftClient client_;
 
   void SwitchClient ( int server_id );
   void SwitchClient ( std::string addr );
@@ -103,6 +103,9 @@ bool Admin::AddServer( int id, std::string ip, int db_port, int raft_port, std::
                 LogWarn( "Server already exists in the cluster. Success." );
                 return true;
             }
+            case raft::ErrorCode::SERVER_NOT_FOUND: {
+                __builtin_unreachable();
+            }
             case raft::ErrorCode::OTHER: {
                 LogWarn( "Unknown error. Retrying." );
                 break;
@@ -161,6 +164,9 @@ bool Admin::RemoveServer( int id )
             case raft::ErrorCode::SERVER_NOT_FOUND: {
                 LogWarn( "Server not found in the cluster. Aborting." );
                 return false;
+            }
+            case raft::ErrorCode::SERVER_EXISTS: {
+              __builtin_unreachable();
             }
             case raft::ErrorCode::OTHER: {
                 LogWarn( "Unknown error. Retrying." );
