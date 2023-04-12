@@ -12,7 +12,7 @@ struct ServerInfo {
     char ip[20];
     int raft_port;
     int db_port;
-    char name[20];
+    char name[25]; // truncating name to 20 chars, see below
 
     std::string str() const;
 } __attribute__((__packed__));
@@ -93,8 +93,9 @@ inline std::map<int32_t, ServerInfo> ParseConfig(std::string filename)
         } else {    
           server.id = stoi(tokens[header["id"]]);
         }
+
         strcpy(server.ip, tokens[header["intf_ip"]].c_str());
-        strcpy(server.name, tokens[header["name"]].c_str());
+        strcpy(server.name, tokens[header["name"]].substr(0, 20).c_str());
         server.raft_port = stoi(tokens[header["raft_port"]]);
         server.db_port = stoi(tokens[header["db_port"]]);
         servers[server.id] = server;
