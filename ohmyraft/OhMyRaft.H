@@ -22,6 +22,9 @@
 
 namespace raft {
 
+constexpr int32_t RAFT_LEADER_PERIOD_MS = 50;
+constexpr int32_t RAFT_MEMBERSHIP_WAIT_ITERS = 100;
+
 enum class RaftRole : int32_t {
   Follower = 0,
   Candidate = 1, 
@@ -211,11 +214,12 @@ std::map<int32_t, ServerInfo> RaftManager<T>::getClusterConfig()
 template <class T>
 std::string RaftManager<T>::getLastKnownLeaderDBAddr()
 {
-  std::unique_lock stateLock { state_.Mut };
+  std::lock_guard stateLock { state_.Mut };
   return  std::string(state_.ClusterConfig[state_.LastKnownLeaderId].ip) + ":" +
           std::to_string(state_.ClusterConfig[state_.LastKnownLeaderId].db_port);
 }
 
+// This one does not handle locking, use side code needs to do it.
 template <class T>
 std::string RaftManager<T>::getLastKnownLeaderRaftAddr()
 {
@@ -303,7 +307,7 @@ void RaftManager<T>::runLeaderOneIter()
       // @FIXME: logs for debugging
       if ( ! args.entries.empty() ) {
         LogInfo("Sent (with entries) AppendEntriesRPC to PeerId=" + std::to_string( id ) 
-            + " " + args.str());
+            + " " + std::to_string(args.entries.size()));
         LogInfo("Response Received to AppendEntriesRPC from PeerId=" + std::to_string( id )
             + " " + replyOpt.value().str());
       }
@@ -350,14 +354,9 @@ void RaftManager<T>::runLeaderOneIter()
         }
       }
     });
-    //threadHandles.push_back(th);
     th->detach();
   }
 
-  //for ( auto& th : threadHandles) {
-  //    th->join();
-  //    delete th;
-  //}
 }
 
 template <class T>
@@ -380,7 +379,7 @@ void RaftManager<T>::raftImpl()
     }
 
     // sleep for a while
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    std::this_thread::sleep_for(std::chrono::milliseconds(RAFT_LEADER_PERIOD_MS));
    
     // prepare to receive more
     raftIn_.clear();
@@ -641,6 +640,7 @@ AddServerRet RaftManager<T>::AddServer( AddServerParams args)
     return ret;
   }
 
+  stateLock.unlock();
 
   ServerInfo info = {
     .id = serverId,
@@ -658,22 +658,22 @@ AddServerRet RaftManager<T>::AddServer( AddServerParams args)
   // wait until previous config change is commited
   int retryCount = 0;
   LogInfo("Waiting for previous config change to be committed");
-  stateLock.unlock();
-  while (1) {
+  
+  while ( true ) {
     stateLock.lock();
     if ( state_.LastConfigChangeIndex == -1 || 
          state_.LastConfigChangeIndex <= state_.CommitIndex ) {
       break;
     }
-    stateLock.unlock();
 
     retryCount++;
-    if ( retryCount == 10 ) 
+    if ( retryCount == RAFT_MEMBERSHIP_WAIT_ITERS ) 
     {
       ret.errorCode = raft::ErrorCode::PREV_NOT_COMMITTED_TIMEOUT;
       ret.leaderAddr = getLastKnownLeaderRaftAddr();
       return ret;
     }
+    stateLock.unlock();
 
     std::this_thread::sleep_for( std::chrono::milliseconds(100) );
   }
@@ -694,6 +694,7 @@ AddServerRet RaftManager<T>::AddServer( AddServerParams args)
   auto [ isSubmitted, leaderId ] = submit( op );
   if ( ! isSubmitted ) {
     ret.errorCode = raft::ErrorCode::OTHER;
+    std::lock_guard<std::mutex> lock( state_.Mut );
     ret.leaderAddr = getLastKnownLeaderRaftAddr();
     return ret;
   }
@@ -719,16 +720,16 @@ AddServerRet RaftManager<T>::AddServer( AddServerParams args)
          state_.LastConfigChangeIndex <= state_.CommitIndex ) {
       break;
     }
-    stateLock.unlock();
     LogInfo("Waiting for the new config change to get committed...");
 
     retryCount++;
-    if ( retryCount == 100 ) 
+    if ( retryCount == RAFT_MEMBERSHIP_WAIT_ITERS ) 
     {
       ret.errorCode = raft::ErrorCode::CUR_NOT_COMMITTED_TIMEOUT;
       ret.leaderAddr = getLastKnownLeaderRaftAddr();
       return ret;
     }
+    stateLock.unlock();
 
     std::this_thread::sleep_for( std::chrono::milliseconds(100) );
   }
@@ -772,15 +773,15 @@ RemoveServerRet RaftManager<T>::RemoveServer( RemoveServerParams args)
          state_.LastConfigChangeIndex <= state_.CommitIndex) {
       break;
     }
-    stateLock.unlock();
 
     retryCount++;
-    if ( retryCount == 10 ) 
+    if ( retryCount == RAFT_MEMBERSHIP_WAIT_ITERS ) 
     {
       ret.errorCode = raft::ErrorCode::PREV_NOT_COMMITTED_TIMEOUT;
       ret.leaderAddr = getLastKnownLeaderRaftAddr();
       return ret;
     }
+    stateLock.unlock();
 
     std::this_thread::sleep_for( std::chrono::milliseconds(100) );
   }
@@ -814,15 +815,15 @@ RemoveServerRet RaftManager<T>::RemoveServer( RemoveServerParams args)
          state_.LastConfigChangeIndex <= state_.CommitIndex ) {
       break;
     }
-    stateLock.unlock();
 
     retryCount++;
-    if ( retryCount == 100 ) 
+    if ( retryCount == RAFT_MEMBERSHIP_WAIT_ITERS ) 
     {
       ret.errorCode = raft::ErrorCode::CUR_NOT_COMMITTED_TIMEOUT;
       ret.leaderAddr = getLastKnownLeaderRaftAddr();
       return ret;
     }
+    stateLock.unlock();
 
     std::this_thread::sleep_for( std::chrono::milliseconds(100) );
   }

@@ -73,6 +73,8 @@ inline std::map<int32_t, ServerInfo> ParseConfig(std::string filename)
     }
 
     // parse each node
+    size_t cntr = 0;
+
     while (std::getline(file, line))
     {
         // check if line is empty
@@ -85,7 +87,12 @@ inline std::map<int32_t, ServerInfo> ParseConfig(std::string filename)
             tokens.push_back(token);
         }
         ServerInfo server;
-        server.id = stoi(tokens[header["id"]]);
+        
+        if ( header.find("id") == header.end() ) {
+          server.id = cntr++;
+        } else {    
+          server.id = stoi(tokens[header["id"]]);
+        }
         strcpy(server.ip, tokens[header["intf_ip"]].c_str());
         strcpy(server.name, tokens[header["name"]].c_str());
         server.raft_port = stoi(tokens[header["raft_port"]]);
