@@ -56,10 +56,10 @@ int main(int argc, char **argv)
     std::cout << "Raft server listening on " << raft_server_addr << std::endl;
 
     // test that we can connect to all servers with grpc
-    for (auto server : servers)
+    for (auto [id, server] : servers )
     {
         std::cout << "Testing connection to " << server.name << " at " << server.ip << ":" << server.raft_port << std::endl;
-        std::string address(server.ip + ":" + std::to_string(server.raft_port));
+        std::string address(std::string(server.ip) + ":" + std::to_string(server.raft_port));
         RaftClient client(grpc::CreateChannel(address, grpc::InsecureChannelCredentials()));
 
         while (client.Ping(1) < 0)

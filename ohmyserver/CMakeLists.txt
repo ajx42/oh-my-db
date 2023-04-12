@@ -125,6 +125,13 @@ target_link_libraries(replica raft_grpc_proto)
 add_executable(client client.cpp)
 target_link_libraries(client db_grpc_proto)
 
+add_executable(admin admin.cpp)
+target_link_libraries(admin leveldb)
+target_link_libraries(admin ohmyraftrpc)
+target_link_libraries(admin dbserverrpc)
+target_link_libraries(admin db_grpc_proto)
+target_link_libraries(admin raft_grpc_proto)
+
 add_executable(updatemask updatemask.cpp)
 target_link_libraries(updatemask leveldb)
 target_link_libraries(updatemask ohmyraftrpc)
@@ -133,5 +140,5 @@ target_link_libraries(updatemask db_grpc_proto)
 target_link_libraries(updatemask raft_grpc_proto)
 
 
-install(TARGETS client replica server updatemask DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
+install(TARGETS client replica server updatemask admin DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
 

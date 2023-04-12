@@ -5,13 +5,17 @@
 #include <iostream>
 #include <fstream>
 #include <unordered_map>
+#include <cstring>
 
 struct ServerInfo {
-    std::string ip;
+    int id;
+    char ip[20];
     int raft_port;
     int db_port;
-    std::string name;
-};
+    char name[20];
+
+    std::string str() const;
+} __attribute__((__packed__));
 
 struct TokenizedOut {
   std::unordered_map<std::string, int32_t> header;
@@ -52,9 +56,9 @@ inline TokenizedOut TokenizeCSV( std::string filename )
   return ret;
 }
 
-inline std::vector<ServerInfo> ParseConfig(std::string filename)
+inline std::map<int32_t, ServerInfo> ParseConfig(std::string filename)
 {
-    std::vector<ServerInfo> servers;
+    std::map<int32_t, ServerInfo> servers;
     std::ifstream file(filename);
     std::string line;
     // parse header
@@ -69,6 +73,8 @@ inline std::vector<ServerInfo> ParseConfig(std::string filename)
     }
 
     // parse each node
+    size_t cntr = 0;
+
     while (std::getline(file, line))
     {
         // check if line is empty
@@ -81,11 +87,17 @@ inline std::vector<ServerInfo> ParseConfig(std::string filename)
             tokens.push_back(token);
         }
         ServerInfo server;
-        server.name = tokens[header["name"]];
-        server.ip = tokens[header["intf_ip"]];
+        
+        if ( header.find("id") == header.end() ) {
+          server.id = cntr++;
+        } else {    
+          server.id = stoi(tokens[header["id"]]);
+        }
+        strcpy(server.ip, tokens[header["intf_ip"]].c_str());
+        strcpy(server.name, tokens[header["name"]].c_str());
         server.raft_port = stoi(tokens[header["raft_port"]]);
         server.db_port = stoi(tokens[header["db_port"]]);
-        servers.push_back(server);
+        servers[server.id] = server;
     }
     return servers;
 }

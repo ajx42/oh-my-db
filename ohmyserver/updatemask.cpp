@@ -46,7 +46,8 @@ int main( int argc, char** argv )
   
   // get RPC client handles for each server
   for ( size_t i = 0; i < servers.size(); ++i ) {
-    auto address = servers[i].ip + ":" + std::to_string(servers[i].raft_port);
+    auto address = std::string( servers[i].ip ) + ":" 
+                  + std::to_string(servers[i].raft_port);
     peers[i] = std::make_unique<RaftClient>(grpc::CreateChannel(
           address, grpc::InsecureChannelCredentials()));
   }
