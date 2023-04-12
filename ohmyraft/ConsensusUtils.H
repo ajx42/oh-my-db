@@ -8,6 +8,7 @@
 #include <string>
 #include <sstream>
 #include <iostream>
+#include <type_traits>
 
 #include "PromiseStore.H"
 #include "ohmydb/LevelDBProxy.H"
@@ -29,13 +30,15 @@ struct Operation {
   using getarg_t = KeyT;
   using putarg_t = std::pair<KeyT, ValT>;
   using addserverarg_t = ServerInfo;
-  using rmserverarg_t = int; //todo
+  using rmserverarg_t = int32_t;
   using getres_t = std::optional<ValT>;
   using putres_t = bool;
-  // @TODO: How to remove duplicate type? (getarg_t and rmserverarg_t both int)
   using arg_t = std::variant<getarg_t, putarg_t, addserverarg_t>;
   using res_t = std::variant<getres_t, putres_t>;
-  
+ 
+  // if this changes, please update the arg variant
+  static_assert( std::is_same<rmserverarg_t, getarg_t>() );
+
   enum OpType : int32_t { GET = 0, PUT = 1, ADD_SERVER = 2, REMOVE_SERVER = 3 };
 
   OpType kind;

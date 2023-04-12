@@ -651,8 +651,9 @@ AddServerRet RaftManager<T>::AddServer( AddServerParams args)
   strcpy(info.name, args.name);
   std::string serverAddr = std::string(info.ip) + ":" + std::to_string(info.raft_port);
 
-  // Catch up
-  // @todo
+  // We have not implemented CatchUp logic here. So CatchUp happens
+  // using the usual AppendEntries RPC. This work is tracked here:
+  // https://github.com/ajain365/oh-my-db/issues/23
 
   // wait until previous config change is commited
   int retryCount = 0;
@@ -681,14 +682,10 @@ AddServerRet RaftManager<T>::AddServer( AddServerParams args)
   int prevConfigChangeIndex = state_.LastConfigChangeIndex;
   stateLock.unlock();
 
-  std::promise<raft::RaftOp::res_t> pr;
-  auto ft = pr.get_future();
-  auto it = raft::PromiseStore<raft::RaftOp::res_t>::Instance()
-              .insert( std::move( pr ) );
   raft::RaftOp op {
     .kind = raft::RaftOp::ADD_SERVER,
     .args = info,
-    .promiseHandle = { it }
+    .promiseHandle = { }
   };
 
   // the operation gets submitted
@@ -696,8 +693,6 @@ AddServerRet RaftManager<T>::AddServer( AddServerParams args)
   // once the entry is applied to log (before committed)
   auto [ isSubmitted, leaderId ] = submit( op );
   if ( ! isSubmitted ) {
-    raft::PromiseStore<raft::RaftOp::res_t>::Instance()
-     .getAndRemove( it );
     ret.errorCode = raft::ErrorCode::OTHER;
     ret.leaderAddr = getLastKnownLeaderRaftAddr();
     return ret;
@@ -793,14 +788,10 @@ RemoveServerRet RaftManager<T>::RemoveServer( RemoveServerParams args)
   int prevConfigChangeIndex = state_.LastConfigChangeIndex;
   stateLock.unlock();
 
-  std::promise<raft::RaftOp::res_t> pr;
-  auto ft = pr.get_future();
-  auto it = raft::PromiseStore<raft::RaftOp::res_t>::Instance()
-              .insert( std::move( pr ) );
   raft::RaftOp op {
     .kind = raft::RaftOp::REMOVE_SERVER,
     .args = args.serverId,
-    .promiseHandle = { it }
+    .promiseHandle = { }
   };
 
   // the operation gets submitted
@@ -809,8 +800,6 @@ RemoveServerRet RaftManager<T>::RemoveServer( RemoveServerParams args)
   auto [ isSubmitted, leaderId ] = submit( op );
   if ( ! isSubmitted ) {
     LogInfo("Failed to submit remove server op");
-    raft::PromiseStore<raft::RaftOp::res_t>::Instance()
-     .getAndRemove( it );
     ret.errorCode = raft::ErrorCode::OTHER;
     ret.leaderAddr = getLastKnownLeaderRaftAddr();
     return ret;
