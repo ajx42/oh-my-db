@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.25.2)
+cmake_minimum_required(VERSION 3.25.1)
 project(ohmy_tools LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
