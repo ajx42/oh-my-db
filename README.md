@@ -9,6 +9,22 @@ cmake ../ -DCMAKE_INSTALL_PREFIX=.
 cmake --build . --parallel 16
 ```
 
+## First run!
+- The key configuration file is `config.csv`, a sample is included in this repo (see `sample_config.csv`). If you are running on cloudlab, you can use our utilities to generate a config from the cloudlab manifest. Otherwise, it is always okay to simply edit it by hand. It is fairly intuitive.
+- Note that this repo needs to be cloned and built on each of the replica nodes.
+- Launch `replica` binary on each of the replicas. Note that this binary is available in `build/ohmyserver/` upon building.
+- The command line will look like as follows:
+```
+./replica --config ../../config.csv --db_path /tmp/db_0 --id 0
+```
+- Note that there is an `id` parameter which tells which node configuration (out of the several available in `config.csv` to use). Clearly each replica needs to be launched with a distinct id.
+- Once the majority of the replicas are up, the cluster is ready. You will observe logs showing election happening and one of the replica's status changing to leader.
+- For a quick test, run the following benchmarking tool (also available under `build/ohmyserver/`). This should print latencies for reads, writes, etc.
+```
+./client --config ../../config.csv --iter 3
+```
+- You are now ready to do more with this cluster!
+
 ## Where? What?
 - `ohmyserver`: Contains all the RPC clients, services (`RaftService` and `DatabaseService`), and tools (like `updatemask`) that use RPCs in some form.
 - `ohmyraft`: Contains RAFT implementation and related concurrency related utilities.
@@ -34,6 +50,12 @@ if ( val.has_value() ) {
 
 bool isSuccessful = repDB.put({45, 789});
 ```
+
+## News!
+__August 10, 2024:__ Recently we deployed this cluster on `Raspberry Pi 5` nodes. We are looking forward to supporting more constrainted nodes like `Raspberry Pi Zero`.
+
+![Setup](RPi5.png "An RPi5 Node")
+
 ## Wow, how can I setup OhMyDB cluster?
 The top level binary for each replica is called `replica` and the source resides in `ohmyserver/replica.cpp`. You can either handcraft a `config.csv` and launch the binary on each replica or use our scripts in `scripts`.
 

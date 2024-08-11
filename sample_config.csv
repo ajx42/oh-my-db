@@ -1,0 +1,5 @@
+name,intf_ip,host_ip,hostname,username,raft_port,db_port
+node0,10.1.2.3,10.1.2.3,jc-inf-1,ajain,8080,12345
+node1,10.1.2.4,10.1.2.4,jc-inf-2,ajain,8080,12345
+node2,10.1.2.5,10.1.2.5,jc-zero-1,ajain,8080,12345
+node3,10.1.2.6,10.1.2.6,jc-zero-2,ajain,8080,12345
