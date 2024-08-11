@@ -1,6 +1,11 @@
 # oh-my-db
 Oh My Database - the shockingly amazing replicated database powered by RAFT and built by Hayden, Tommy, and Aditya!
 
+## News!
+__August 10, 2024:__ Recently we deployed this cluster on `Raspberry Pi 5` nodes. We are looking forward to supporting more constrainted nodes like `Raspberry Pi Zero`.
+
+![Setup](RPi5.png "An RPi5 Node")
+
 ## Build Instructions
 ```shell
 mkdir build
@@ -50,11 +55,6 @@ if ( val.has_value() ) {
 
 bool isSuccessful = repDB.put({45, 789});
 ```
-
-## News!
-__August 10, 2024:__ Recently we deployed this cluster on `Raspberry Pi 5` nodes. We are looking forward to supporting more constrainted nodes like `Raspberry Pi Zero`.
-
-![Setup](RPi5.png "An RPi5 Node")
 
 ## Wow, how can I setup OhMyDB cluster?
 The top level binary for each replica is called `replica` and the source resides in `ohmyserver/replica.cpp`. You can either handcraft a `config.csv` and launch the binary on each replica or use our scripts in `scripts`.
